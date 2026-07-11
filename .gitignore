@@ -1,0 +1,10 @@
+.env
+node_modules/
+raw/*
+!raw/courses-all.json
+promo/
+design-a.html
+design-b.html
+design-c.html
+design-index.html
+*.art.html

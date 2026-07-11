@@ -1,0 +1,12 @@
+{
+  "name": "naebaeka",
+  "version": "0.1.0",
+  "private": true,
+  "description": "내배카랭킹 — 국비지원 훈련과정 취업률 랭킹 (naebaeka.com)",
+  "scripts": {
+    "collect": "node scripts/collect.js 1500 1",
+    "build": "node scripts/build-pages.js",
+    "daily": "node scripts/collect.js 1500 1 && node scripts/build-pages.js",
+    "serve": "node scripts/serve.js"
+  }
+}

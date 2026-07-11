@@ -1,0 +1,29 @@
+name: daily-update
+on:
+  schedule:
+    - cron: '30 20 * * *'   # 05:30 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # 수집 실패(해외 IP 차단 등)해도 기존 courses-all.json으로 빌드 계속
+      - name: Collect
+        run: node scripts/collect.js 1500 1 || echo "collect failed - using existing data"
+      - name: Build
+        run: node scripts/build-pages.js
+      - name: Commit & push
+        run: |
+          git config user.name "naebaeka-bot"
+          git config user.email "actions@github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "daily update $(date -u +%Y-%m-%d)"
+          git push
