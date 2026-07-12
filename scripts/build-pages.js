@@ -265,6 +265,18 @@ write('privacy.html', layout({
 <p class="small">시행일: 2026-07-12</p></article>`,
 }));
 
+// ---------- 404 (CF Pages가 미매칭 경로에 404 상태로 서빙 — soft-404 방지) ----------
+write('404.html', layout({
+  title: '페이지를 찾을 수 없어요 (404) | 내배카랭킹',
+  desc: '요청하신 페이지가 없거나 마감된 과정일 수 있습니다.',
+  canonical: '/404.html',
+  content: `<header class="hero"><span class="kick">404</span>
+<h1>페이지를 찾을 수 없어요</h1>
+<p class="stat">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
+<a class="cta" href="index.html">취업률 랭킹 홈으로</a>
+<a class="cta sub" href="g/index.html">국비지원 가이드 보기</a>`,
+}));
+
 // ---------- style + robots + sitemap ----------
 fs.copyFileSync(path.join(ROOT, 'assets', 'style.css'), path.join(PUB, 'style.css'));
 write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
