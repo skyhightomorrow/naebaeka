@@ -48,8 +48,8 @@ const tabs = (activeSlug, depth = 0) => {
       `<a class="tab${activeSlug === c.slug ? ' on' : ''}" href="${p}c/${c.slug}.html">${c.name}</a>`).join('') + '</div>';
 };
 
-const footNote = (extra = '') => `<p class="foot-note"><b>취업률은 과정이 아니라 학원 단위</b>예요 — 그 학원의 같은 직종 수료생(2024년 · 10명 이상)이 실제 취업한 비율이에요. 과정을 고를 때 '취업으로 이어지는 학원'을 찾는 신호로 봐주세요.${extra} <b>†</b> 95% 이상은 소규모 기관일 수 있어요.</p>
-<details class="basis"><summary>산출 기준 자세히</summary><p>2024년에 종료된 과정 기준, NCS 소분류 직종별 훈련기관 평균 취업률입니다. 수료자 10명 미만이거나 신규 개설된 과정은 취업률이 공시되지 않아 순위에서 제외됩니다. 진학자·입대자 등은 산정에서 빠집니다.</p></details>`;
+const footNote = (extra = '') => `<p class="foot-note"><b>순서는 '신뢰도 순'이에요.</b> 취업률이 높은 순이 아니라, 취업률에 <b>기관 인증</b>과 <b>표본 신뢰도</b>를 반영한 순서예요. 100%처럼 완벽한 수치는 수료 인원이 적은 곳(예: 10명 중 10명)에서 나오기 쉬워서, 인증받은 기관의 안정적인 90%대가 위로 올라옵니다. 표시되는 %는 모두 고용노동부가 공시한 실제 취업률이에요.${extra}</p>
+<details class="basis"><summary>취업률은 어떻게 계산되나요?</summary><p>취업률은 과정이 아니라 <b>학원×직종 단위</b>입니다 — 그 학원이 2024년에 배출한 같은 직종 수료생(10명 이상, 진학·입대자 제외)이 실제 취업한 비율(수료 후 취업인원 ÷ 정상수료인원). 수료자 10명 미만이거나 신규 과정은 공시가 없어 순위에서 빠집니다. <b>†</b>는 95% 이상(소표본 가능)을 표시합니다. 표본 인원까지 반영한 정밀 순위는 준비 중입니다.</p></details>`;
 
 const moreBtn = (hiddenCount, label) => hiddenCount > 0
   ? `<button class="more" onclick="document.querySelectorAll('.row.hid').forEach(e=>e.classList.remove('hid'));this.remove()">나머지 ${hiddenCount}${label} 더보기</button>` : '';
@@ -60,7 +60,7 @@ function courseRow(c, i, depth, { showCat = false } = {}) {
   return `<a class="row t${i + 1}${i >= VISIBLE ? ' hid' : ''}" href="${detailHref(c, depth)}">
 <div class="rank">${i + 1}</div>
 <div class="info"><div class="ct">${esc(c.title)}</div>
-<div class="meta"><span class="org">${esc(c.org)}</span>${showCat ? `<span class="catb">${c.catName || ''}</span>` : ''}<span>${esc((c.region || '').split(' ').slice(0, 2).join(' '))}</span>${c.status === '모집중' ? '<span><span class="dot"></span>모집중</span>' : ''}</div></div>
+<div class="meta"><span class="org">${esc(c.org)}</span>${c.certGrade ? `<span class="certb">${c.certGrade}</span>` : ''}${showCat ? `<span class="catb">${c.catName || ''}</span>` : ''}<span>${esc((c.region || '').split(' ').slice(0, 2).join(' '))}</span>${c.status === '모집중' ? '<span><span class="dot"></span>모집중</span>' : ''}</div></div>
 <div class="rt"><div class="big">${c.emplRate}%${c.emplRate >= 95 ? '<sup>†</sup>' : ''}</div><div class="lb">학원 취업률</div></div></a>`;
 }
 
@@ -72,7 +72,7 @@ function courseRow(c, i, depth, { showCat = false } = {}) {
   const rows = top.map((g, i) => `<a class="row t${i + 1}${i >= VISIBLE ? ' hid' : ''}" href="p/${g.best.courseId}.html">
 <div class="rank">${i + 1}</div>
 <div class="info"><div class="ct">${esc(g.best.title)}${g.count > 1 ? ` <span class="n">외 ${g.count - 1}개</span>` : ''}</div>
-<div class="meta"><span class="org">${esc(g.org)}</span><span class="catb">${g.catName}</span><span>${esc((g.best.region || '').split(' ').slice(0, 2).join(' '))}</span></div></div>
+<div class="meta"><span class="org">${esc(g.org)}</span>${g.certGrade ? `<span class="certb">${g.certGrade}</span>` : ''}<span class="catb">${g.catName}</span><span>${esc((g.best.region || '').split(' ').slice(0, 2).join(' '))}</span></div></div>
 <div class="rt"><div class="big">${g.rate}%${g.rate >= 95 ? '<sup>†</sup>' : ''}</div><div class="lb">학원 취업률</div></div></a>`).join('\n');
 
   const regionLinks = M.regionCats.slice().sort((a, b) => b.ranked.length - a.ranked.length).slice(0, 24)
