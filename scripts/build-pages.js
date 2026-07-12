@@ -29,6 +29,9 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <meta name="naver-site-verification" content="7108627c0035156a6348336453f9c261b652f776">
+<link rel="icon" href="${p}favicon.svg" type="image/svg+xml">
+<link rel="icon" href="${p}favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="${p}apple-touch-icon.png">
 <link rel="canonical" href="${ORIGIN}${canonical}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="내배카랭킹">
