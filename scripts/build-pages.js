@@ -42,6 +42,8 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
 <meta name="twitter:image" content="${ORIGIN}/og.png">
 <link rel="stylesheet" href="${p}style.css">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4BW4OSF4YY"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-4BW4OSF4YY');</script>
 </head><body>
 <div class="wrap">
 <div class="top"><a class="brand" href="${p}index.html">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
@@ -198,6 +200,8 @@ ${rateBlock}
 // ---------- 가이드 (예약발행: date <= 오늘 KST, BUILD_DATE로 시뮬레이션 가능) ----------
 const { guides } = require('../lib/guides');
 const TODAY = process.env.BUILD_DATE || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+// 예약발행 게이트를 확정적으로: 가이드 디렉토리를 비우고 발행 도래분만 재생성 (미래분 잔존 방지)
+fs.rmSync(path.join(PUB, 'g'), { recursive: true, force: true });
 const pubGuides = guides(M).filter(g => g.date <= TODAY).sort((a, b) => b.date < a.date ? -1 : 1);
 for (const g of pubGuides) {
   const content = `
@@ -250,7 +254,7 @@ write('privacy.html', layout({
 <h2>쿠키 및 광고</h2>
 <p>사이트는 Google 애드센스 광고를 게재할 수 있습니다. Google을 포함한 제3자 광고 사업자는 쿠키를 사용해 이용자의 이전 방문 기록을 바탕으로 광고를 게재할 수 있습니다. Google의 광고 쿠키 사용으로 이용자에게 맞춤형 광고가 제공될 수 있으며, 이용자는 <a href="https://adssettings.google.com" rel="noopener" target="_blank">Google 광고 설정</a>에서 맞춤 광고를 해제할 수 있습니다.</p>
 <h2>통계 도구</h2>
-<p>서비스 개선을 위해 방문 통계 도구(예: Google Search Console, 웹 분석 도구)를 사용할 수 있으며, 이 과정에서 쿠키가 사용될 수 있습니다. 수집되는 정보는 개인을 식별하지 않는 통계 정보입니다.</p>
+<p>서비스 개선을 위해 <b>Google Analytics(GA4)</b>, Cloudflare Web Analytics, 검색엔진 웹마스터 도구(Google Search Console·네이버 서치어드바이저) 등의 방문 통계 도구를 사용합니다. 이 과정에서 쿠키가 사용될 수 있으며, 수집되는 정보는 개인을 식별하지 않는 통계 정보(방문 수·페이지·유입 경로 등)입니다. Google Analytics의 데이터 수집을 원치 않으시면 <a href="https://tools.google.com/dlpage/gaoptout" rel="noopener" target="_blank">Google 애널리틱스 차단 브라우저 부가기능</a>을 이용할 수 있습니다.</p>
 <h2>문의</h2>
 <p>개인정보 관련 문의: skyhightomorrow@gmail.com</p>
 <p class="small">시행일: 2026-07-12</p></article>`,
