@@ -1,7 +1,9 @@
 name: daily-update
+# 사이트별 수집 cron은 20분씩 어긋나게 배치한다 (무료 빌드 동시성 1개 → 새벽 몰림 방지).
+#   ijacalc 05:30 · naebaeka 05:50 · 이후 사이트 06:10, 06:30 …
 on:
   schedule:
-    - cron: '30 20 * * *'   # 05:30 KST
+    - cron: '50 20 * * *'   # 05:50 KST (ijacalc 05:30과 20분 간격)
   workflow_dispatch:
 
 permissions:
