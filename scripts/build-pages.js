@@ -30,6 +30,16 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
 <meta name="description" content="${esc(desc)}">
 <meta name="naver-site-verification" content="7108627c0035156a6348336453f9c261b652f776">
 <link rel="canonical" href="${ORIGIN}${canonical}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="내배카랭킹">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${ORIGIN}${canonical}">
+<meta property="og:image" content="${ORIGIN}/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(desc)}">
+<meta name="twitter:image" content="${ORIGIN}/og.png">
 <link rel="stylesheet" href="${p}style.css">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
 </head><body>
@@ -246,8 +256,9 @@ write('privacy.html', layout({
 <p class="small">시행일: 2026-07-12</p></article>`,
 }));
 
-// ---------- style + sitemap ----------
+// ---------- style + robots + sitemap ----------
 fs.copyFileSync(path.join(ROOT, 'assets', 'style.css'), path.join(PUB, 'style.css'));
+write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 {
   const urls = ['/', '/about.html', '/g/index.html'];
   for (const g of pubGuides) urls.push(`/g/${g.slug}.html`);
