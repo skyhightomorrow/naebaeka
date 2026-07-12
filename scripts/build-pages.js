@@ -1,7 +1,7 @@
 // 정적 페이지 전체 생성: index + 분야 + 지역×분야 + 과정 상세 + sitemap
 const fs = require('fs');
 const path = require('path');
-const { load } = require('../lib/model');
+const { load, isMeaningful } = require('../lib/model');
 const { SIDO_SLUG, SIDO_NAME, esc } = require('../lib/normalize');
 
 const ROOT = path.join(__dirname, '..');
@@ -157,9 +157,11 @@ ${footNote()}
   }));
 }
 
-// ---------- 과정 상세 ----------
+// ---------- 과정 상세 (유의미한 과정만: 취업률 보유 + 모집중 — thin/마감 페이지 미생성) ----------
+fs.rmSync(path.join(PUB, 'p'), { recursive: true, force: true }); // 제외된 과정의 잔존 페이지 제거(게이트 확정)
 const CAT_OF = Object.fromEntries(M.cats.map(c => [c.slug, c.name]));
 for (const c of M.courses) {
+  if (!isMeaningful(c)) continue;
   const catName = CAT_OF[c.cat] || '기타';
   const org = c.org || '훈련기관';
   const others = M.orgRates.get(c.org);
@@ -271,11 +273,11 @@ write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n
   for (const g of pubGuides) urls.push(`/g/${g.slug}.html`);
   for (const c of M.cats) if (c.slug !== 'etc' && c.ranked.length >= 3) urls.push(`/c/${c.slug}.html`);
   for (const rc of M.regionCats) urls.push(`/r/${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}.html`);
-  for (const c of M.courses) if (c.emplRate != null) urls.push(`/p/${c.courseId}.html`);
+  for (const c of M.courses) if (isMeaningful(c)) urls.push(`/p/${c.courseId}.html`);
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map(u => `<url><loc>${ORIGIN}${u}</loc><lastmod>${M.generatedAt}</lastmod></url>`).join('\n') + '\n</urlset>';
   write('sitemap.xml', xml);
   console.log(`sitemap: ${urls.length} URLs`);
 }
 
-console.log(`빌드 완료 — index 1, 분야 ${M.cats.filter(c => c.slug !== 'etc' && c.ranked.length >= 3).length}, 지역×분야 ${M.regionCats.length}, 상세 ${M.courses.length}`);
+console.log(`빌드 완료 — index 1, 분야 ${M.cats.filter(c => c.slug !== 'etc' && c.ranked.length >= 3).length}, 지역×분야 ${M.regionCats.length}, 상세 ${M.courses.filter(isMeaningful).length}(유의미)`);
