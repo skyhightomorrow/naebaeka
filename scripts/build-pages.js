@@ -28,6 +28,7 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
+<meta name="naver-site-verification" content="7108627c0035156a6348336453f9c261b652f776">
 <link rel="canonical" href="${ORIGIN}${canonical}">
 <link rel="stylesheet" href="${p}style.css">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
