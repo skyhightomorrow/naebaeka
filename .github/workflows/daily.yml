@@ -12,14 +12,16 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 30   # 잡 전체 백스톱 — 어느 스텝이든 매달리면 강제 종료(2026-07-13 collect 무한대기로 3시간 in_progress 사고 방지)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # 수집 실패(해외 IP 차단 등)해도 기존 courses-all.json으로 빌드 계속
+      # 수집이 매달려도(네트워크 스톨 등) 20분 후 종료하고 기존 courses-all.json으로 빌드 계속.
+      # ⚠️ `|| echo` 는 비정상 '종료'만 잡음 — 프로세스가 hang하면 exit가 안 나 폴백이 안 걸리므로 timeout 필수.
       - name: Collect
-        run: node scripts/collect.js 1500 1 || echo "collect failed - using existing data"
+        run: timeout 20m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"
       - name: Build
         run: node scripts/build-pages.js
       - name: Commit & push
