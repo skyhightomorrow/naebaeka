@@ -45,8 +45,8 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
 <meta name="twitter:image" content="${ORIGIN}/og.png">
 <link rel="stylesheet" href="${p}style.css">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-4BW4OSF4YY"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-4BW4OSF4YY');</script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EJ1MQ3E3TW"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EJ1MQ3E3TW');</script>
 </head><body>
 <div class="wrap">
 <div class="top"><a class="brand" href="${p}index.html">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
