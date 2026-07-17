@@ -47,7 +47,8 @@ const categories = CATEGORIES.concat([{ slug: 'etc', name: '기타' }]).map(cat 
 }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
 
 const data = {
-  generatedAt: new Date().toISOString().slice(0, 10),
+  // KST 기준일 (Actions 러너는 UTC — 새벽 05:50 KST 실행 시 UTC는 전날이라 보정 필요)
+  generatedAt: process.env.BUILD_DATE || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10),
   source: '고용노동부 고용24 직업훈련 공시(비공식 재구성) — NCS직종별 훈련기관 평균취업률(2024 종료과정 기준)',
   totalCourses: courses.length,
   withRate: courses.filter(c => c.emplRate != null).length,
