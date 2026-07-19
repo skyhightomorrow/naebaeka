@@ -101,6 +101,16 @@ footer.ft a{color:var(--mut)}
 .art td a{text-decoration:none}
 .art .small{font-size:12px;color:var(--mut)}
 .art .date{font-size:12px;color:var(--mut);margin:4px 0 0}
+/* 학원 페이지: 직종별 취업률 */
+h2.oh{font-size:15px;font-weight:800;margin:24px 0 10px;letter-spacing:-.02em}
+.ratebox h2.oh{margin-top:0}
+.oratelist{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+.orate{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+  border-radius:11px;padding:12px 15px;text-decoration:none;color:inherit;transition:.13s}
+a.orate:hover{border-color:var(--teal)}
+.orate .k{flex:1;font-size:14px;font-weight:700;letter-spacing:-.01em}
+.orate .v{font-family:var(--num);font-size:19px;font-weight:800;color:var(--teal-d);letter-spacing:-.03em}
+.orate .v sup{font-size:10px;color:var(--gold)}
 .glist{margin-top:14px}
 .glist a{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 17px;margin-bottom:9px;text-decoration:none}
 .glist a:hover{border-color:var(--teal)}
