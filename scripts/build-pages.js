@@ -17,6 +17,30 @@ const M = load();
 const won = n => n == null ? '-' : n.toLocaleString('en-US') + '원';
 const VISIBLE = 10;
 
+// 가이드 목록은 index·분야 페이지의 내부링크에도 쓰이므로 먼저 계산 (실제 파일 생성은 아래 가이드 섹션에서)
+const { guides } = require('../lib/guides');
+const TODAY = process.env.BUILD_DATE || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+const pubGuides = guides(M).filter(g => g.date <= TODAY).sort((a, b) => b.date < a.date ? -1 : 1);
+
+// 분야 페이지 ↔ 관련 가이드 매핑 (해당 분야 방문자가 이어서 읽을 글)
+const CAT_GUIDES = {
+  'it-dev': ['it-gukbi-goreugi', 'kdt-k-digital-training', 'jagyeokjeung-vs-portfolio'],
+  'ai-data': ['kdt-k-digital-training', 'it-gukbi-goreugi'],
+  'beauty': ['miyong-gukbi-gaideu', 'jagyeokjeung-vs-portfolio'],
+  'cook': ['jori-gukbi-gaideu', 'ingi-jagyeokjeung-top'],
+  'care': ['yoyangbohosa-gukbi', 'ingi-jagyeokjeung-top'],
+};
+// 모든 페이지에서 노출할 기본 가이드 (검색량 큰 주제 순)
+const CORE_GUIDES = ['naeilbaeumcard-jagyeok-sincheong', 'naeilbaeumcard-sayongcheo', 'gukbi-jabudamgeum', 'chwieomnyul-boneun-beop'];
+
+const guideBySlug = Object.fromEntries(pubGuides.map(g => [g.slug, g]));
+// slug 배열 → 가이드 링크 카드 HTML (미발행분은 자동 제외)
+const guideLinks = (slugs, depth) => {
+  const p = '../'.repeat(depth);
+  const items = slugs.map(s => guideBySlug[s]).filter(Boolean);
+  return items.length ? items.map(g => `<a href="${p}g/${g.slug}"><div class="t">${esc(g.title)}</div><div class="d">${esc(g.desc)}</div></a>`).join('') : '';
+};
+
 function write(rel, html) {
   const f = path.join(PUB, rel);
   fs.mkdirSync(path.dirname(f), { recursive: true });
@@ -95,18 +119,19 @@ function courseRow(c, i, depth, { showCat = false } = {}) {
     .map(rc => `<a href="r/${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}">${SIDO_NAME[SIDO_SLUG[rc.sido]] || rc.sido} ${rc.catName}</a>`).join('');
 
   const content = `
-<header class="hero"><span class="kick">취업률로 줄 세운 국비지원 과정</span>
+<header class="hero"><span class="kick">내일배움카드 · 국비지원 학원 비교</span>
 <h1>내일배움카드로 무엇을 배우면<br><em>진짜 취업</em>될까?</h1>
 <p class="stat">전국 <b>${totalRanked}</b>개 과정 · 학원 ${M.overall.length}곳 비교 · 평균 <b>${avgAll}%</b> · ${M.generatedAt} 기준</p></header>
 ${tabs('all')}
 ${rows}
 ${moreBtn(top.length - VISIBLE, '곳')}
 ${footNote(' 전체 랭킹은 학원×분야 단위로 묶어 대표 과정을 보여줘요.')}
-<div class="seclinks"><h2>지역별 취업률 순위</h2><div class="grid">${regionLinks}</div></div>`;
+<div class="seclinks"><h2>지역별 국비지원 학원 취업률 순위</h2><div class="grid">${regionLinks}</div></div>
+<div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks([...CORE_GUIDES, ...pubGuides.map(g => g.slug).filter(s => !CORE_GUIDES.includes(s))], 0)}</div></div>`;
 
   write('index.html', layout({
-    title: '내배카랭킹 — 내일배움카드 국비지원 과정 취업률 랭킹',
-    desc: `내일배움카드로 배울 수 있는 전국 ${totalRanked}개 국비지원 과정을 고용노동부 공시 취업률로 비교합니다. 학원 광고가 아닌 실제 데이터 기반 순위.`,
+    title: '내일배움카드 학원 취업률 순위 — 국비지원 과정 비교 | 내배카랭킹',
+    desc: `내일배움카드로 다닐 수 있는 전국 국비지원 학원 ${M.overall.length}곳, 과정 ${totalRanked}개를 고용노동부 공시 취업률로 비교합니다. 학원 광고가 아닌 실제 데이터 기반 순위.`,
     canonical: '/', content,
     jsonld: { '@context': 'https://schema.org', '@type': 'ItemList', name: '국비지원 과정 취업률 랭킹', itemListElement: top.slice(0, 10).map((g, i) => ({ '@type': 'ListItem', position: i + 1, name: `${g.org} — ${g.best.title}` })) },
   }));
@@ -119,18 +144,20 @@ for (const cat of M.cats) {
   const rows = top.map((c, i) => courseRow(c, i, 1)).join('\n');
   const regionLinks = M.regionCats.filter(rc => rc.catSlug === cat.slug)
     .map(rc => `<a href="../r/${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}">${SIDO_NAME[SIDO_SLUG[rc.sido]] || rc.sido} ${cat.name} (${rc.ranked.length})</a>`).join('');
+  const catGuideHtml = guideLinks([...(CAT_GUIDES[cat.slug] || []), ...CORE_GUIDES].slice(0, 4), 1);
   const content = `
-<header class="hero"><span class="kick">취업률로 줄 세운 국비지원 과정</span>
+<header class="hero"><span class="kick">내일배움카드 · ${cat.name} 국비지원 학원</span>
 <h1>${cat.name}, 무엇을 배우면<br><em>진짜 취업</em>될까?</h1>
-<p class="stat">과정 <b>${top.length}</b>개 비교 · 분야 평균 <b>${cat.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
+<p class="stat">학원·과정 <b>${top.length}</b>개 비교 · 분야 평균 <b>${cat.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
 ${tabs(cat.slug, 1)}
 ${rows}
 ${moreBtn(top.length - VISIBLE, '개 과정')}
 ${footNote()}
-${regionLinks ? `<div class="seclinks"><h2>${cat.name} 지역별 순위</h2><div class="grid">${regionLinks}</div></div>` : ''}`;
+${regionLinks ? `<div class="seclinks"><h2>${cat.name} 국비지원 학원 지역별 순위</h2><div class="grid">${regionLinks}</div></div>` : ''}
+${catGuideHtml ? `<div class="seclinks"><h2>${cat.name} 국비과정 고르기 전에</h2><div class="glist">${catGuideHtml}</div></div>` : ''}`;
   write(`c/${cat.slug}.html`, layout({
-    title: `${cat.name} 국비지원 과정 취업률 순위 TOP ${Math.min(top.length, 50)} | 내배카랭킹`,
-    desc: `내일배움카드 ${cat.name} 분야 ${cat.total}개 과정 중 취업률 공시가 있는 ${top.length}개를 순위로 비교합니다. 분야 평균 ${cat.avgRate}%.`,
+    title: `${cat.name} 국비지원 학원·과정 취업률 순위 TOP ${Math.min(top.length, 50)} | 내배카랭킹`,
+    desc: `내일배움카드로 다닐 수 있는 ${cat.name} 국비지원 학원·과정 ${cat.total}개 중 취업률 공시가 있는 ${top.length}개를 순위로 비교합니다. 분야 평균 ${cat.avgRate}%.`,
     canonical: `/c/${cat.slug}`, content, depth: 1,
     jsonld: { '@context': 'https://schema.org', '@type': 'ItemList', name: `${cat.name} 국비지원 과정 취업률 순위`, itemListElement: top.slice(0, 10).map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.title })) },
   }));
@@ -141,25 +168,42 @@ for (const rc of M.regionCats) {
   const slug = `${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}`;
   const name = SIDO_NAME[SIDO_SLUG[rc.sido]] || rc.sido;
   const rows = rc.ranked.map((c, i) => courseRow(c, i, 1)).join('\n');
+  // 형제 페이지 상호링크: 154개 지역×분야 페이지가 서로 고립되지 않도록 (크롤 깊이·롱테일 개선)
+  const sameCatOtherRegions = M.regionCats.filter(x => x.catSlug === rc.catSlug && x.sido !== rc.sido)
+    .sort((a, b) => b.ranked.length - a.ranked.length).slice(0, 16)
+    .map(x => `<a href="${SIDO_SLUG[x.sido] || x.sido}-${x.catSlug}">${SIDO_NAME[SIDO_SLUG[x.sido]] || x.sido} ${x.catName}</a>`).join('');
+  const sameRegionOtherCats = M.regionCats.filter(x => x.sido === rc.sido && x.catSlug !== rc.catSlug)
+    .sort((a, b) => b.ranked.length - a.ranked.length)
+    .map(x => `<a href="${SIDO_SLUG[x.sido] || x.sido}-${x.catSlug}">${name} ${x.catName} (${x.ranked.length})</a>`).join('');
+
   const content = `
-<header class="hero"><span class="kick">${name} · ${rc.catName}</span>
-<h1>${name} ${rc.catName} 국비과정<br><em>취업률 순위</em></h1>
-<p class="stat">과정 <b>${rc.ranked.length}</b>개 · 평균 <b>${rc.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
+<header class="hero"><span class="kick">내일배움카드 · ${name} ${rc.catName}</span>
+<h1>${name} ${rc.catName} 국비지원 학원<br><em>취업률 순위</em></h1>
+<p class="stat">학원·과정 <b>${rc.ranked.length}</b>개 · 평균 <b>${rc.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
 ${tabs(rc.catSlug, 1)}
 ${rows}
 ${moreBtn(rc.ranked.length - VISIBLE, '개 과정')}
 ${footNote()}
-<a class="cta sub" href="../c/${rc.catSlug}">전국 ${rc.catName} 순위 보기</a>`;
+<a class="cta sub" href="../c/${rc.catSlug}">전국 ${rc.catName} 순위 보기</a>
+${sameRegionOtherCats ? `<div class="seclinks"><h2>${name}의 다른 분야 국비지원 학원</h2><div class="grid">${sameRegionOtherCats}</div></div>` : ''}
+${sameCatOtherRegions ? `<div class="seclinks"><h2>다른 지역 ${rc.catName} 순위</h2><div class="grid">${sameCatOtherRegions}</div></div>` : ''}
+<div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks(CORE_GUIDES, 1)}</div></div>`;
   write(`r/${slug}.html`, layout({
-    title: `${name} ${rc.catName} 국비지원 과정 취업률 순위 (${rc.ranked.length}개) | 내배카랭킹`,
-    desc: `${name} 지역 내일배움카드 ${rc.catName} 과정 ${rc.ranked.length}개를 고용노동부 공시 취업률 순으로 비교합니다.`,
+    title: `${name} ${rc.catName} 국비지원 학원 취업률 순위 (${rc.ranked.length}개) | 내배카랭킹`,
+    desc: `${name} 지역 내일배움카드 ${rc.catName} 국비지원 학원·과정 ${rc.ranked.length}개를 고용노동부 공시 취업률 순으로 비교합니다. 평균 ${rc.avgRate}%.`,
     canonical: `/r/${slug}`, content, depth: 1,
+    jsonld: { '@context': 'https://schema.org', '@type': 'ItemList', name: `${name} ${rc.catName} 국비지원 학원 취업률 순위`, itemListElement: rc.ranked.slice(0, 10).map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: `${c.org} — ${c.title}` })) },
   }));
 }
 
 // ---------- 과정 상세 (유의미한 과정만: 취업률 보유 + 모집중 — thin/마감 페이지 미생성) ----------
 fs.rmSync(path.join(PUB, 'p'), { recursive: true, force: true }); // 제외된 과정의 잔존 페이지 제거(게이트 확정)
 const CAT_OF = Object.fromEntries(M.cats.map(c => [c.slug, c.name]));
+// 실제 생성된 지역×분야 페이지 목록 (상세 → 지역 링크가 404를 가리키지 않도록 확인용)
+const REGION_PAGES = new Map(M.regionCats.map(rc => [
+  `${rc.sido}|${rc.catSlug}`,
+  { slug: `${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}`, name: SIDO_NAME[SIDO_SLUG[rc.sido]] || rc.sido, catName: rc.catName, count: rc.ranked.length },
+]));
 for (const c of M.courses) {
   if (!isMeaningful(c)) continue;
   const catName = CAT_OF[c.cat] || '기타';
@@ -167,6 +211,7 @@ for (const c of M.courses) {
   const others = M.orgRates.get(c.org);
   const otherList = others ? [...others.entries()].filter(([k]) => k !== catName) : [];
   const work24 = `https://www.work24.go.kr/hr/a/a/1100/trnnCrsInf.do`;
+  const rp = REGION_PAGES.get(`${c.sido}|${c.cat}`);
   const rateBlock = c.emplRate != null ? `
 <div class="ratebox">
 <div class="rline"><span class="huge">${c.emplRate}%${c.emplRate >= 95 ? '<sup>†</sup>' : ''}</span><span class="rlb">학원 취업률<br><span style="font-weight:400;color:var(--mut);font-size:11.5px">${esc(org)} · ${catName} 직종</span></span></div>
@@ -192,7 +237,9 @@ ${rateBlock}
 </div>
 <p class="foot-note">수강료는 정부지원 전 금액이에요. 내일배움카드를 쓰면 훈련 유형과 개인 조건에 따라 45~100%까지 지원돼 실제 부담은 훨씬 적습니다. 정확한 자부담금·수강신청은 고용24에서 확인하세요.</p>
 <a class="cta" href="${work24}" target="_blank" rel="noopener">고용24에서 이 과정 검색하기</a>
-<a class="cta sub" href="../c/${c.cat}">${catName} 취업률 순위 전체 보기</a>`;
+<a class="cta sub" href="../c/${c.cat}">${catName} 취업률 순위 전체 보기</a>
+${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학원 순위 (${rp.count}개) 보기</a>` : ''}
+<div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks(CORE_GUIDES, 1)}</div></div>`;
 
   write(`p/${c.courseId}.html`, layout({
     title: `${c.title} — ${org} 취업률·수강료 | 내배카랭킹`,
@@ -202,12 +249,9 @@ ${rateBlock}
   }));
 }
 
-// ---------- 가이드 (예약발행: date <= 오늘 KST, BUILD_DATE로 시뮬레이션 가능) ----------
-const { guides } = require('../lib/guides');
-const TODAY = process.env.BUILD_DATE || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+// ---------- 가이드 (예약발행: date <= 오늘 KST — 목록은 파일 상단에서 계산됨) ----------
 // 예약발행 게이트를 확정적으로: 가이드 디렉토리를 비우고 발행 도래분만 재생성 (미래분 잔존 방지)
 fs.rmSync(path.join(PUB, 'g'), { recursive: true, force: true });
-const pubGuides = guides(M).filter(g => g.date <= TODAY).sort((a, b) => b.date < a.date ? -1 : 1);
 for (const g of pubGuides) {
   const content = `
 <nav class="crumb"><a href="../">홈</a> › <a href="./">가이드</a></nav>
