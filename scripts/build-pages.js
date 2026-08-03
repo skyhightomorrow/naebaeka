@@ -332,14 +332,15 @@ fs.rmSync(path.join(PUB, 'g'), { recursive: true, force: true });
 for (const g of pubGuides) {
   const content = `
 <nav class="crumb"><a href="../">홈</a> › <a href="./">가이드</a></nav>
-<article class="art"><h1>${esc(g.title)}</h1><p class="date">${g.date} · 내배카랭킹</p>
+<article class="art"><h1>${esc(g.title)}</h1><p class="date">${g.date} · Jason Jung</p>
 ${g.body}
+<p class="foot-note">글쓴이: <b>Jason Jung</b> — 내배카랭킹을 만들고 운영하는 1인 웹 개발자. 교육·취업 전문가는 아니며, 글의 수치는 모두 고용노동부 고용24 공시 데이터에서 가져옵니다. <a href="../about">→ 만든 사람과 데이터 원칙</a></p>
 </article>
 <a class="cta sub" href="../">전체 취업률 랭킹 보기</a>`;
   write(`g/${g.slug}.html`, layout({
     title: `${g.title} | 내배카랭킹`, desc: g.desc,
     canonical: `/g/${g.slug}`, content, depth: 1,
-    jsonld: { '@context': 'https://schema.org', '@type': 'Article', headline: g.title, datePublished: g.date, author: { '@type': 'Organization', name: '내배카랭킹' } },
+    jsonld: { '@context': 'https://schema.org', '@type': 'Article', headline: g.title, datePublished: g.date, author: { '@type': 'Person', name: 'Jason Jung', jobTitle: 'Web developer', url: `${ORIGIN}/about` }, publisher: { '@type': 'Organization', name: '내배카랭킹', url: ORIGIN } },
   }));
 }
 {
@@ -354,10 +355,22 @@ ${g.body}
 
 // ---------- 필수 3종: 소개 · 개인정보처리방침 ----------
 write('about.html', layout({
-  title: '내배카랭킹 소개', desc: '내배카랭킹은 고용노동부 공시 데이터를 재구성해 국비지원 훈련과정을 취업률로 비교하는 정보 서비스입니다.',
+  title: '내배카랭킹 소개 — 만든 사람과 데이터 원칙', desc: '내배카랭킹은 웹 개발자 Jason Jung이 혼자 만들고 운영하는 정보 서비스입니다. 고용노동부 공시 데이터를 가공 없이 재구성해 국비지원 훈련과정을 취업률로 비교합니다.',
   canonical: '/about',
+  jsonld: {
+    '@context': 'https://schema.org', '@type': 'AboutPage', url: `${ORIGIN}/about`,
+    mainEntity: {
+      '@type': 'Person', name: 'Jason Jung', jobTitle: 'Web developer',
+      email: 'skyhightomorrow@gmail.com', url: `${ORIGIN}/about`,
+      knowsAbout: ['국민내일배움카드', '고용노동부 훈련기관 취업률 공시 데이터', '국비지원 직업훈련 과정 비교'],
+      worksFor: { '@type': 'Organization', name: '내배카랭킹', url: ORIGIN },
+    },
+  },
   content: `<article class="art"><h1>내배카랭킹 소개</h1>
 <p><b>내배카랭킹</b>은 내일배움카드로 수강할 수 있는 전국 국비지원 훈련과정을 <b>실제 취업률</b>로 비교하는 정보 서비스입니다.</p>
+<h2>만든 사람</h2>
+<p>내배카랭킹은 웹 개발자 <b>Jason Jung</b>이 혼자 만들고 운영합니다. 데이터 수집기와 순위 계산, 페이지 생성, 가이드 글까지 전부 직접 만듭니다.</p>
+<p>분명히 해 둘 것이 있습니다. <b>저는 교육 전문가도, 취업 상담사도 아닙니다.</b> 직업훈련이나 고용 분야의 자격·경력이 있는 사람이 아니라, 공개된 데이터를 읽고 검증해서 비교 가능한 형태로 정리하는 개발자입니다. 그래서 이 사이트는 제 의견이나 추천을 얹는 대신, 고용노동부가 공시한 수치를 산출 기준과 함께 그대로 보여주는 것을 원칙으로 합니다. 어떤 숫자든 출처가 궁금하시면 메일을 주세요 — 어디서 가져왔는지 보여드리겠습니다.</p>
 <h2>왜 만들었나</h2>
 <p>국비 과정을 검색하면 학원 홍보 글이 대부분이고, 정작 판단에 필요한 "이 학원 수료생이 실제로 취업하는가"는 찾기 어렵습니다. 그 데이터는 고용노동부가 이미 공시하고 있지만 흩어져 있어 비교가 어렵습니다. 내배카랭킹은 이 공시 데이터를 매일 수집해 분야별·지역별 순위로 재구성합니다.</p>
 <h2>데이터 원칙</h2>
