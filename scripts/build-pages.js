@@ -361,7 +361,7 @@ write('about.html', layout({
     '@context': 'https://schema.org', '@type': 'AboutPage', url: `${ORIGIN}/about`,
     mainEntity: {
       '@type': 'Person', name: 'Jason Jung', jobTitle: 'Web developer',
-      email: 'skyhightomorrow@gmail.com', url: `${ORIGIN}/about`,
+      email: 'hello@naebaeka.com', url: `${ORIGIN}/about`,
       knowsAbout: ['국민내일배움카드', '고용노동부 훈련기관 취업률 공시 데이터', '국비지원 직업훈련 과정 비교'],
       worksFor: { '@type': 'Organization', name: '내배카랭킹', url: ORIGIN },
     },
@@ -383,7 +383,7 @@ write('about.html', layout({
 <h2>고지</h2>
 <p>본 사이트는 고용노동부·고용24와 무관한 비공식 정보 서비스입니다. 수강 신청·자부담금 확인 등 공식 절차는 고용24(work24.go.kr)에서 진행하세요.</p>
 <h2>문의</h2>
-<p>skyhightomorrow@gmail.com</p></article>`,
+<p>hello@naebaeka.com</p></article>`,
 }));
 write('privacy.html', layout({
   title: '개인정보처리방침 | 내배카랭킹', desc: '내배카랭킹 개인정보처리방침 및 쿠키 사용 안내.',
@@ -395,7 +395,7 @@ write('privacy.html', layout({
 <h2>통계 도구</h2>
 <p>서비스 개선을 위해 <b>Google Analytics(GA4)</b>, Cloudflare Web Analytics, 검색엔진 웹마스터 도구(Google Search Console·네이버 서치어드바이저) 등의 방문 통계 도구를 사용합니다. 이 과정에서 쿠키가 사용될 수 있으며, 수집되는 정보는 개인을 식별하지 않는 통계 정보(방문 수·페이지·유입 경로 등)입니다. Google Analytics의 데이터 수집을 원치 않으시면 <a href="https://tools.google.com/dlpage/gaoptout" rel="noopener" target="_blank">Google 애널리틱스 차단 브라우저 부가기능</a>을 이용할 수 있습니다.</p>
 <h2>문의</h2>
-<p>개인정보 관련 문의: skyhightomorrow@gmail.com</p>
+<p>개인정보 관련 문의: hello@naebaeka.com</p>
 <p class="small">시행일: 2026-07-12</p></article>`,
 }));
 
