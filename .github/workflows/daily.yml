@@ -1,9 +1,13 @@
 name: daily-update
 # 사이트별 수집 cron은 20분씩 어긋나게 배치한다 (무료 빌드 동시성 1개 → 새벽 몰림 방지).
 #   ijacalc 05:30 · naebaeka 05:50 · 이후 사이트 06:10, 06:30 …
+# ⚠️ GitHub 예약 실행은 보장되지 않는다 — 공식 문서: "If the load is sufficiently high enough,
+#    some queued jobs may be dropped." 2026-08-07에 A·C·D 3사이트가 동시에 미발화했다(실패가 아니라 run 자체가 안 생김).
+#    보충 회차를 오후에 하나 더 두되, 오전이 성공했으면 guard가 건너뛴다(고용24 수집을 하루 두 번 돌리지 않기 위해).
 on:
   schedule:
-    - cron: '50 20 * * *'   # 05:50 KST (ijacalc 05:30과 20분 간격)
+    - cron: '50 20 * * *'   # 05:50 KST (ijacalc 05:30과 20분 간격) — 본 회차
+    - cron: '40 3 * * *'    # 12:40 KST — 보충 회차(오전 누락 시에만 실제로 수집)
   workflow_dispatch:
 
 permissions:
@@ -15,16 +19,35 @@ jobs:
     timeout-minutes: 30   # 잡 전체 백스톱 — 어느 스텝이든 매달리면 강제 종료(2026-07-13 collect 무한대기로 3시간 in_progress 사고 방지)
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50   # guard가 최근 "daily update" 커밋 시각을 봐야 한다(얕은 클론이면 1개만 보임)
+      # 보충 회차는 최근 20시간 내 daily update 커밋이 있으면 건너뛴다.
+      # workflow_dispatch에는 github.event.schedule이 비어 있어 수동 실행은 항상 돈다.
+      - name: Skip if today's run already succeeded
+        id: guard
+        run: |
+          last=$(git log -1 --format=%ct --grep="^daily update" || echo 0)
+          [ -z "$last" ] && last=0
+          age=$(( $(date +%s) - last ))
+          if [ "${{ github.event.schedule }}" = "40 3 * * *" ] && [ "$age" -lt 72000 ]; then
+            echo "본 회차가 ${age}초 전에 성공 — 보충 회차 건너뜀"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip != 'true'
         with:
           node-version: 20
       # 수집이 매달려도(네트워크 스톨 등) 20분 후 종료하고 기존 courses-all.json으로 빌드 계속.
       # ⚠️ `|| echo` 는 비정상 '종료'만 잡음 — 프로세스가 hang하면 exit가 안 나 폴백이 안 걸리므로 timeout 필수.
+      # ⚠️ 타임아웃돼도 데이터는 안 잘린다 — collect가 courses-all.json에 누적 병합하기 때문(2026-08-07 실측).
       - name: Collect
+        if: steps.guard.outputs.skip != 'true'
         run: timeout 20m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"
       - name: Build
+        if: steps.guard.outputs.skip != 'true'
         run: node scripts/build-pages.js
       - name: Commit & push
+        if: steps.guard.outputs.skip != 'true'
         run: |
           git config user.name "naebaeka-bot"
           git config user.email "actions@github.com"
