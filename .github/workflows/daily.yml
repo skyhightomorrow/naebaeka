@@ -52,5 +52,5 @@ jobs:
           git config user.name "naebaeka-bot"
           git config user.email "actions@github.com"
           git add -A
-          git diff --staged --quiet || git commit -m "daily update $(date -u +%Y-%m-%d)"
+          git diff --staged --quiet || git commit -m "daily update $(TZ=Asia/Seoul date +%Y-%m-%d)"
           git push
