@@ -47,8 +47,12 @@ function write(rel, html) {
   fs.writeFileSync(f, html, 'utf8');
 }
 
-function layout({ title, desc, canonical, content, jsonld, depth = 0 }) {
-  const p = '../'.repeat(depth);
+// abs=true → 자산·홈 링크를 절대경로로. 404 페이지 전용:
+// CF Pages는 미매칭 경로에 404.html을 "그 경로 그대로" 서빙하므로(/g/xxx, /o/xxx …),
+// 상대경로(depth=0 기준)를 쓰면 /g/style.css 처럼 어긋나 스타일·파비콘이 전부 깨진다.
+function layout({ title, desc, canonical, content, jsonld, depth = 0, abs = false }) {
+  const p = abs ? '/' : '../'.repeat(depth);
+  const home = abs ? '/' : `${p}./`;
   return `<!doctype html><html lang="ko"><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
@@ -73,7 +77,7 @@ ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EJ1MQ3E3TW');</script>
 </head><body>
 <div class="wrap">
-<div class="top"><a class="brand" href="${p}./">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
+<div class="top"><a class="brand" href="${home}">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
 ${content}
 <footer class="ft">취업률은 고용노동부 고용24 공시 기준(2024년 종료 과정 · NCS직종별 훈련기관 평균)입니다.<br>
 본 사이트는 공식 고용24가 아니며, 공시 데이터를 재구성한 정보 서비스입니다 · 데이터 매일 자동 갱신<br>
@@ -403,7 +407,7 @@ write('privacy.html', layout({
 write('404.html', layout({
   title: '페이지를 찾을 수 없어요 (404) | 내배카랭킹',
   desc: '요청하신 페이지가 없거나 마감된 과정일 수 있습니다.',
-  canonical: '/404',
+  canonical: '/404', abs: true,
   content: `<header class="hero"><span class="kick">404</span>
 <h1>페이지를 찾을 수 없어요</h1>
 <p class="stat">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
