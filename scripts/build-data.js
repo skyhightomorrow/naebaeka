@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { CATEGORIES, categorize, CAT_MAP } = require('../lib/categorize');
+const { CERT_RANK } = require('../lib/cert');
 
 const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'raw', 'courses-all.json'), 'utf8'));
 
@@ -18,7 +19,8 @@ const courses = raw.map(c => ({
 }));
 
 // 분야별 집계 + 랭킹 (취업률 보유·비원격만 랭킹 대상, 취업률 desc → 인증등급 → 저비용)
-const gradeRank = { 'BHA': 5, '우수훈련기관': 4, '5년인증': 3, '3년인증': 2, '1년인증': 1 };
+// 등급 서열의 정본은 lib/cert.js. '5년인증'은 옛 수집분 호환 별칭(= 우수훈련기관, 같은 등급).
+const gradeRank = { ...CERT_RANK, '5년인증': CERT_RANK['우수훈련기관'] };
 function rankable(list) {
   const filtered = list.filter(c => c.emplRate != null && !c.remote);
   // 동일 기관·동일 과정명(회차 차이) 중복 제거 — 취업률 높은 1건만

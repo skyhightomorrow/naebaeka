@@ -2,6 +2,7 @@
 // 사용: node scripts/collect.js [페이지수=60] [시작페이지=1]
 const fs = require('fs');
 const path = require('path');
+const { certGradeOf } = require('../lib/cert');
 
 const PAGES = Number(process.argv[2] || 60);
 const START = Number(process.argv[3] || 1);
@@ -34,7 +35,7 @@ function parseCards(html) {
       typeCode: g(/fn_viewTracseInfo\('[^']+','[^']+','([^']+)','[^']*'/), // 상세 URL의 crseTracseSe
       instId: g(/data-trin_cstm_id\s*=\s*"([^"]+)"/) || g(/fn_viewTracseInfo\('[^']+','[^']+','[^']+','([^']*)'/),
       org: clean(g(/title="([^"]+?) 훈련기관정보 새 창 열림"/)),
-      certGrade: g(/alt="(1년인증|3년인증|5년인증|우수훈련기관|BHA)"/),
+      certGrade: certGradeOf(c), // 마크업·정규화 근거는 lib/cert.js 주석 참고
       costWon: (x => x ? Number(x[1].replace(/,/g, '')) : null)(c.match(/([\d,]{4,})\s*원/)),
       startDate: pm && pm[1], endDate: pm && pm[2],
       hours: g(/(\d+일,\s*총\d+시간)/),
