@@ -54,7 +54,11 @@ function parseCards(html) {
   const map = new Map();
   if (fs.existsSync(outFile)) for (const x of JSON.parse(fs.readFileSync(outFile, 'utf8'))) map.set(x.courseId + '_' + x.round, x);
 
-  let total = null;
+  const before = map.size;
+  const seen = new Set();          // 이번 실행에서 실제로 목록에 나타난 키(courseId_round)
+  const seenIds = new Set();       // 같은 것의 courseId 단위 — 사이트 공시 건수와 대조용
+  let total = null, okPages = 0, failPages = 0, emptyStreak = 0;
+
   for (let p = START; p < START + PAGES; p++) {
     let html, ok = false;
     for (let retry = 0; retry < 3 && !ok; retry++) {
@@ -65,13 +69,42 @@ function parseCards(html) {
         if (!ok) await sleep(1500);
       } catch (e) { await sleep(2000); }
     }
-    if (!ok) { console.log(`page ${p}: 실패(스킵)`); continue; }
+    if (!ok) { failPages++; console.log(`page ${p}: 실패(스킵)`); continue; }
+    okPages++;
     if (total == null) { const t = html.match(/총&nbsp;<span[^>]*>([\d,]+)<\/span>건/); total = t ? t[1] : '?'; }
     const cards = parseCards(html);
-    for (const x of cards) map.set(x.courseId + '_' + x.round, x);
+    // 데이터가 끝난 뒤의 빈 페이지가 이어지면 조기 종료 (뒤쪽 수백 페이지를 헛돌지 않게)
+    emptyStreak = cards.length === 0 ? emptyStreak + 1 : 0;
+    for (const x of cards) { const k = x.courseId + '_' + x.round; seen.add(k); seenIds.add(x.courseId); map.set(k, x); }
     if (p % 10 === 0 || p === START) console.log(`page ${p}: +${cards.length} (누적 ${map.size} / 전체 ${total})`);
     fs.writeFileSync(outFile, JSON.stringify([...map.values()], null, 0), 'utf8');
+    if (emptyStreak >= 3) { console.log(`page ${p}: 빈 페이지 3연속 — 목록 끝으로 보고 종료`); break; }
     await sleep(500);
   }
-  console.log(`\n완료: ${map.size}건 저장 → ${outFile} (사이트 전체 ${total}건)`);
+
+  // ── 사라진 과정 정리 ────────────────────────────────────────────────
+  // 종전에는 기존 파일에 병합만 하고 지우지 않아, 고용24에서 내려간 과정이 영원히 남았다.
+  // 2026-08-11 실측: 파일 28,846건 / 고유 courseId 17,541건인데 사이트 공시는 14,592건 —
+  // 약 3,000개 과정이 '모집중'으로 사이트에 계속 노출되고 있었다(죽은 링크 + 저품질 신호).
+  // 전량 수집(START=1)이 정상 완주했을 때만 정리한다. 부분 수집이나 대량 실패 시에는 건드리지 않는다.
+  // 안전 기준은 "기존 파일 대비 얼마나 줄었나"가 아니라 **사이트가 공시한 전체 건수를 다 봤나**로 잡는다.
+  // (첫 정리에서는 누적 잔존분 때문에 정당하게 절반 가까이 줄어들 수 있어, 감소율 가드는 오히려 정리를 막는다.)
+  const fullRun = START === 1;
+  const failRate = okPages + failPages ? failPages / (okPages + failPages) : 1;
+  const siteTotal = total ? Number(String(total).replace(/,/g, '')) : null;
+  const coverage = siteTotal ? seenIds.size / siteTotal : null;
+  if (!fullRun) {
+    console.log(`\n부분 수집(START=${START}) — 사라진 과정 정리는 건너뜀`);
+  } else if (failRate > 0.05) {
+    console.log(`\n⚠️ 실패 페이지 비율 ${(failRate * 100).toFixed(1)}% — 정리 건너뜀(수집 누락을 삭제로 오인하지 않도록)`);
+  } else if (coverage == null || coverage < 0.9) {
+    console.log(`\n⚠️ 공시 ${siteTotal ?? '?'}건 중 ${seenIds.size}건만 확인(커버리지 ${coverage == null ? '?' : (coverage * 100).toFixed(1) + '%'}) — 정리 건너뜀`);
+  } else {
+    let removed = 0;
+    for (const k of [...map.keys()]) if (!seen.has(k)) { map.delete(k); removed++; }
+    if (removed) fs.writeFileSync(outFile, JSON.stringify([...map.values()], null, 0), 'utf8');
+    console.log(`\n사라진 과정 정리: ${removed}건 삭제 (기존 ${before} → ${map.size})`);
+  }
+
+  console.log(`완료: ${map.size}건 저장 → ${outFile} (사이트 전체 ${total}건, 페이지 성공 ${okPages}·실패 ${failPages})`);
 })();
