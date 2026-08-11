@@ -3,6 +3,7 @@
 // 출력: raw/sample-courses.json + 콘솔 필드 커버리지 통계
 const fs = require('fs');
 const path = require('path');
+const { certGradeOf } = require('../lib/cert');
 
 const PAGES = Number(process.argv[2] || 5);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
@@ -18,16 +19,20 @@ const strip = s => s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function parseCards(html) {
-  // 카드 경계: 과정명 h3 기준으로 분할
-  const chunks = html.split(/<h3 class="t3_sb mt10">/).slice(1);
+  // 카드 경계 = <div class="list" data-tracseid data-tracsetme> (collect.js와 동일).
+  // 종전엔 과정명 h3 로 분할했는데, 카드 내부 순서가
+  //   카드래퍼 → 기관링크 → cert_img(인증배지) → h3(과정명)
+  // 이라 h3 로 자르면 기관명·인증등급이 **다음 카드 것**으로 한 칸 밀려 붙었다.
+  const cardRe = /<div class="list" data-tracseid="[^"]+" data-tracsetme="[^"]+"[\s\S]*?(?=<div class="list" data-tracseid=|<\/form>|<div class="paging)/g;
+  const chunks = html.match(cardRe) || [];
   return chunks.map(c => {
     const g = (re) => { const m = c.match(re); return m ? m[1].trim() : null; };
     const ids = c.match(/fn_viewTracseInfo\('([^']+)','([^']+)','([^']+)','([^']*)'/);
     return {
-      title: g(/title="([^"]+?) 훈련과정 정보 새 창 열림"/) || strip((c.match(/<a[^>]*>([\s\S]*?)<\/a>/) || [])[1] || ''),
+      title: g(/title="([^"]+?) 훈련과정 정보 새 창 열림"/) || strip((c.match(/<h3 class="t3_sb mt10">[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/) || [])[1] || ''),
       courseId: ids && ids[1], round: ids && ids[2], typeCode: ids && ids[3], instId: ids && ids[4],
       org: g(/title="([^"]+?) 훈련기관인증평가 닫기"/),
-      certGrade: g(/alt="(1년인증|3년인증|5년인증|우수훈련기관|BHA)"/),
+      certGrade: certGradeOf(c), // 마크업·정규화 근거는 lib/cert.js 주석 참고
       costWon: (m => m ? Number(m[1].replace(/,/g, '')) : null)(c.match(/([\d,]{4,})\s*원/)),
       period: g(/(\d{4}-\d{2}-\d{2}\s*~[\s\S]*?\d{4}-\d{2}-\d{2})/) ,
       hours: g(/(\d+일,\s*총\d+시간)/),
