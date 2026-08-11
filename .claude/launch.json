@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "naebaeka",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/serve.js"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve"],
       "port": 3360
     }
   ]
