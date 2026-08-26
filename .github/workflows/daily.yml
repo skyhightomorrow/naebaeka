@@ -39,7 +39,10 @@ jobs:
           node-version: 20
       # 수집이 매달려도(네트워크 스톨 등) 20분 후 종료하고 기존 courses-all.json으로 빌드 계속.
       # ⚠️ `|| echo` 는 비정상 '종료'만 잡음 — 프로세스가 hang하면 exit가 안 나 폴백이 안 걸리므로 timeout 필수.
-      # ⚠️ 타임아웃돼도 데이터는 안 잘린다 — collect가 courses-all.json에 누적 병합하기 때문(2026-08-07 실측).
+      # ⚠️ 2026-08-26 정정: 위 문장은 틀렸다. collect가 누적 병합하는 건 맞지만 저장이 writeFileSync였고,
+      #    SIGTERM이 7MB 쓰기 도중에 떨어지면 파일이 잘린 채 남아 Build가
+      #    "SyntaxError: Unexpected end of JSON input"으로 죽었다(그날 새벽 회차가 그렇게 실패해 사이트가 하루 낡음).
+      #    지금은 collect가 tmp+rename으로 원자적 저장을 하므로 타임아웃돼도 이전 완전본이 남는다.
       - name: Collect
         if: steps.guard.outputs.skip != 'true'
         run: timeout 20m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"

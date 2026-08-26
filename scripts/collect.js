@@ -51,6 +51,18 @@ function parseCards(html) {
   const outDir = path.join(__dirname, '..', 'raw');
   fs.mkdirSync(outDir, { recursive: true });
   const outFile = path.join(outDir, 'courses-all.json');
+
+  // 원자적 저장 — tmp에 완전히 쓴 뒤 rename 한다.
+  // ⚠️ 이 파일은 7MB가 넘고 수집 루프에서 반복 저장된다. writeFileSync는 대상 파일을 먼저 비우고 쓰므로,
+  //    워크플로의 `timeout 20m`이 보낸 SIGTERM이 쓰기 도중에 떨어지면 JSON이 잘린 채 남는다.
+  //    실제로 2026-08-26 새벽 회차가 그렇게 깨졌다(page 770에서 타임아웃 → Build에서
+  //    "SyntaxError: Unexpected end of JSON input" → 커밋 없음 → 사이트가 하루 낡음).
+  //    rename은 같은 파일시스템에서 원자적이라, 죽어도 "이전 완전본" 아니면 "새 완전본"만 남는다.
+  const save = () => {
+    const tmp = outFile + '.tmp';   // raw/* 는 .gitignore 대상이라 커밋에 섞이지 않는다
+    fs.writeFileSync(tmp, JSON.stringify([...map.values()], null, 0), 'utf8');
+    fs.renameSync(tmp, outFile);
+  };
   const map = new Map();
   if (fs.existsSync(outFile)) for (const x of JSON.parse(fs.readFileSync(outFile, 'utf8'))) map.set(x.courseId + '_' + x.round, x);
 
@@ -77,10 +89,12 @@ function parseCards(html) {
     emptyStreak = cards.length === 0 ? emptyStreak + 1 : 0;
     for (const x of cards) { const k = x.courseId + '_' + x.round; seen.add(k); seenIds.add(x.courseId); map.set(k, x); }
     if (p % 10 === 0 || p === START) console.log(`page ${p}: +${cards.length} (누적 ${map.size} / 전체 ${total})`);
-    fs.writeFileSync(outFile, JSON.stringify([...map.values()], null, 0), 'utf8');
+    if (p % 25 === 0) save();   // 중간 저장(진행분 보존). 매 페이지 저장은 7MB 쓰기를 1500회 반복해 낭비인 데다 kill 창만 넓힌다
     if (emptyStreak >= 3) { console.log(`page ${p}: 빈 페이지 3연속 — 목록 끝으로 보고 종료`); break; }
     await sleep(500);
   }
+
+  save();   // 마지막 중간 저장 이후 수집분 반영
 
   // ── 사라진 과정 정리 ────────────────────────────────────────────────
   // 종전에는 기존 파일에 병합만 하고 지우지 않아, 고용24에서 내려간 과정이 영원히 남았다.
@@ -102,7 +116,7 @@ function parseCards(html) {
   } else {
     let removed = 0;
     for (const k of [...map.keys()]) if (!seen.has(k)) { map.delete(k); removed++; }
-    if (removed) fs.writeFileSync(outFile, JSON.stringify([...map.values()], null, 0), 'utf8');
+    if (removed) save();
     console.log(`\n사라진 과정 정리: ${removed}건 삭제 (기존 ${before} → ${map.size})`);
   }
 
