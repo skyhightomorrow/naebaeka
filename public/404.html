@@ -25,9 +25,42 @@
 <div class="top"><a class="brand" href="/">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
 <header class="hero"><span class="kick">404</span>
 <h1>페이지를 찾을 수 없어요</h1>
-<p class="stat">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
-<a class="cta" href="/">취업률 랭킹 홈으로</a>
-<a class="cta sub" href="/g/">국비지원 가이드 보기</a>
+<p class="stat" id="generic404">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
+<div id="recover"></div>
+<a class="cta" id="home404" href="/">취업률 랭킹 홈으로</a>
+<a class="cta sub" href="/g/">국비지원 가이드 보기</a><script>
+(function(){
+  var CATS={"office":"사무·회계","cook":"조리·제과","design":"디자인","machine":"기계·전기·설비","beauty":"미용·뷰티","ai-data":"AI·데이터","care":"보건·복지","it-dev":"IT·개발","media":"영상·콘텐츠","textile":"섬유·공예","build":"건설·건축","service":"서비스·기타직무"};
+  var m=decodeURIComponent(location.pathname).match(/^\/(p|o)\/([A-Za-z0-9]+)(?:\.html)?\/?$/);
+  if(!m) return;
+  var kind=m[1], key=m[2];
+  fetch('/gone/'+key.slice(-2)+'.json').then(function(r){return r.ok?r.json():null}).then(function(j){
+    var e=j&&j[key]; if(!e) return;
+    var box=document.getElementById('recover'); if(!box) return;
+    var esc=function(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML};
+    var card=function(t,o,w){return '<div class="gonebox"><div class="gt">'+esc(t)+'</div>'+(o?'<div class="go">'+esc(o)+'</div>':'')+'<div class="gw">'+w+'</div></div>'};
+    var h='', links='';
+    if(e[0]==='c'){
+      var title=e[1], org=e[2], cat=e[3], inst=e[4], reason=e[5];
+      h=card(title, org, {1:'모집이 마감돼 지금은 신청할 수 없는 과정이에요.',2:'원격(온라인) 과정이라 취업률 순위에서 빠져 있어요.',3:'수료자가 적어 아직 취업률이 공시되지 않은 과정이에요.'}[reason]||'');
+      if(inst) links+='<a class="cta" href="/o/'+inst+'">'+esc(org)+'의 다른 과정 · 직종별 취업률 보기</a>';
+      if(cat&&CATS[cat]) links+='<a class="cta'+(inst?' sub':'')+'" href="/c/'+cat+'">'+esc(CATS[cat])+' 취업률 순위 전체 보기</a>';
+    } else {
+      var org2=e[1], cat2=e[2], live=e[3];
+      h=card(org2, '', '취업률이 공시된 과정이 1개 이하라 학원 집계 페이지가 없어요.');
+      if(live) links+='<a class="cta" href="/p/'+live+'">'+esc(org2)+'의 과정 보기</a>';
+      if(cat2&&CATS[cat2]) links+='<a class="cta'+(live?' sub':'')+'" href="/c/'+cat2+'">'+esc(CATS[cat2])+' 취업률 순위 전체 보기</a>';
+    }
+    if(!links) return;
+    box.innerHTML=h+links;
+    var home=document.getElementById('home404'); // 복구 링크가 뜨면 홈은 보조 버튼으로 내린다
+    if(home) home.className='cta sub';
+    var g=document.getElementById('generic404'); // 카드가 구체적으로 설명하므로 일반 문구는 뺀다
+    if(g) g.style.display='none';
+    if(window.gtag) gtag('event','gone_recovered',{kind:kind,reason:e[0]==='c'?e[5]:0});
+  }).catch(function(){});
+})();
+</script>
 <footer class="ft">취업률은 고용노동부 고용24 공시 기준(2024년 종료 과정 · NCS직종별 훈련기관 평균)입니다.<br>
 본 사이트는 공식 고용24가 아니며, 공시 데이터를 재구성한 정보 서비스입니다 · 데이터 매일 자동 갱신<br>
 <a href="/about">소개</a> · <a href="/privacy">개인정보처리방침</a> · <a href="/g/">가이드</a></footer>

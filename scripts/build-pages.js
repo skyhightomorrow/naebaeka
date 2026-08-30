@@ -403,21 +403,124 @@ write('privacy.html', layout({
 <p class="small">시행일: 2026-07-12</p></article>`,
 }));
 
+// ---------- 404 복구 맵 (gone/) ----------
+// 왜 필요한가: /p/ 상세는 isMeaningful(취업률 보유 + 비원격 + 모집중)만 생성하므로,
+// 모집이 마감되면 그날 빌드에서 페이지가 사라진다(실측 일 5~25건). 그런데 네이버 색인은
+// 그보다 느리게 갱신돼 이용자가 죽은 URL로 착지한다 — 2026-08-30 실측으로 404 페이지가
+// 주간 조회 1위(38회, 사이트 전체 조회의 약 9%)였고, C의 유입은 사실상 전량 네이버라 손실이 컸다.
+// 삭제된 과정도 raw 피드에는 status=null(마감)로 남아 있어 학원·직종을 그대로 알 수 있다.
+// 그래서 "지워진 URL → 그 과정의 학원/직종" 매핑을 내보내 404에서 이어갈 곳을 제시한다.
+// ⛔ 묘비(tombstone) 페이지를 새로 만들지 않는다 — C의 병목은 크롤 예산(발견됨-미색인 1만+)이라
+//    색인 대상 페이지를 늘리면 역효과다. 그래서 HTML이 아니라 JSON 자산으로만 낸다(robots에서 차단).
+let GONE_CATS = {};
+{
+  const LIVE_P = new Set(M.courses.filter(isMeaningful).map(c => c.courseId));
+  const LIVE_C = new Set(M.cats.filter(c => c.slug !== 'etc' && c.ranked.length >= 3).map(c => c.slug));
+  const LIVE_O = new Set([...ORG_PAGES.values()].map(p => p.instId));
+  GONE_CATS = Object.fromEntries([...LIVE_C].map(s => [s, CAT_OF[s] || s]));
+
+  // 학원별 대표 직종·살아있는 과정 1건 (학원 페이지가 없는 instId 착지용)
+  const orgInfo = new Map(); // org명 → { cats: Map<slug,count>, live: courseId|null, insts: Set }
+  for (const c of M.courses) {
+    if (!c.org) continue;
+    if (!orgInfo.has(c.org)) orgInfo.set(c.org, { cats: new Map(), live: null, insts: new Set() });
+    const o = orgInfo.get(c.org);
+    if (c.instId) o.insts.add(c.instId);
+    if (LIVE_C.has(c.cat)) o.cats.set(c.cat, (o.cats.get(c.cat) || 0) + 1);
+    if (!o.live && LIVE_P.has(c.courseId)) o.live = c.courseId;
+  }
+  const mainCat = o => { const e = [...o.cats.entries()].sort((a, b) => b[1] - a[1])[0]; return e ? e[0] : ''; };
+
+  // 값은 바이트를 아끼려고 배열 + 선두 타입 태그로 둔다. 404 스크립트가 이 형식을 읽는다.
+  //   과정: ['c', 제목, 학원명, 직종slug, 학원페이지instId|'', 사유코드]
+  //   학원: ['o', 학원명, 직종slug, 살아있는 과정 courseId|'']
+  // 사유코드 1=모집마감 · 2=원격과정 · 3=취업률 미공시
+  const gone = new Map();
+  for (const c of M.courses) {
+    if (LIVE_P.has(c.courseId)) continue;
+    const reason = c.status !== '모집중' ? 1 : c.remote ? 2 : 3;
+    const op = ORG_PAGES.get(c.org);
+    gone.set(c.courseId, ['c', c.title || '', c.org || '', LIVE_C.has(c.cat) ? c.cat : '', op ? op.instId : '', reason]);
+  }
+  for (const [org, o] of orgInfo) {
+    for (const instId of o.insts) {
+      if (LIVE_O.has(instId) || gone.has(instId)) continue; // 살아있는 학원 페이지는 건드리지 않음
+      gone.set(instId, ['o', org, mainCat(o), o.live || '']);
+    }
+  }
+
+  // ID 끝 2자리로 샤딩 — 방문자가 1MB를 통째로 받지 않게 한다(404 착지 시에만 ~10KB 1개 요청)
+  fs.rmSync(path.join(PUB, 'gone'), { recursive: true, force: true });
+  const shards = new Map();
+  for (const [k, v] of gone) {
+    const s = k.slice(-2);
+    if (!shards.has(s)) shards.set(s, {});
+    shards.get(s)[k] = v;
+  }
+  let bytes = 0;
+  for (const [s, obj] of shards) {
+    const json = JSON.stringify(obj);
+    bytes += json.length;
+    write(`gone/${s}.json`, json);
+  }
+  console.log(`gone: ${gone.size}건 / ${shards.size}샤드 / 합계 ${(bytes / 1024).toFixed(0)}KB (샤드 평균 ${(bytes / 1024 / (shards.size || 1)).toFixed(1)}KB)`);
+}
+
 // ---------- 404 (CF Pages가 미매칭 경로에 404 상태로 서빙 — soft-404 방지) ----------
+// 착지한 URL이 '지워진 과정/학원'이면 gone/ 맵을 조회해 이어갈 곳(학원 페이지·직종 순위)을 제시한다.
+// 응답코드는 그대로 404를 유지한다 — 페이지는 실제로 없는 게 맞고, soft-200으로 바꾸면 안 된다.
+// ⚠️ 아래는 템플릿 리터럴이라 정규식 백슬래시를 `\\` 로 이스케이프해야 한다.
+//    `\/` 로 쓰면 리터럴이 `/` 로 삼켜져 정규식이 깨진 채 배포된다(2026-08-30에 실제로 한 번 냈다).
+const gone404 = `<script>
+(function(){
+  var CATS=${JSON.stringify(GONE_CATS)};
+  var m=decodeURIComponent(location.pathname).match(/^\\/(p|o)\\/([A-Za-z0-9]+)(?:\\.html)?\\/?$/);
+  if(!m) return;
+  var kind=m[1], key=m[2];
+  fetch('/gone/'+key.slice(-2)+'.json').then(function(r){return r.ok?r.json():null}).then(function(j){
+    var e=j&&j[key]; if(!e) return;
+    var box=document.getElementById('recover'); if(!box) return;
+    var esc=function(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML};
+    var card=function(t,o,w){return '<div class="gonebox"><div class="gt">'+esc(t)+'</div>'+(o?'<div class="go">'+esc(o)+'</div>':'')+'<div class="gw">'+w+'</div></div>'};
+    var h='', links='';
+    if(e[0]==='c'){
+      var title=e[1], org=e[2], cat=e[3], inst=e[4], reason=e[5];
+      h=card(title, org, {1:'모집이 마감돼 지금은 신청할 수 없는 과정이에요.',2:'원격(온라인) 과정이라 취업률 순위에서 빠져 있어요.',3:'수료자가 적어 아직 취업률이 공시되지 않은 과정이에요.'}[reason]||'');
+      if(inst) links+='<a class="cta" href="/o/'+inst+'">'+esc(org)+'의 다른 과정 · 직종별 취업률 보기</a>';
+      if(cat&&CATS[cat]) links+='<a class="cta'+(inst?' sub':'')+'" href="/c/'+cat+'">'+esc(CATS[cat])+' 취업률 순위 전체 보기</a>';
+    } else {
+      var org2=e[1], cat2=e[2], live=e[3];
+      h=card(org2, '', '취업률이 공시된 과정이 1개 이하라 학원 집계 페이지가 없어요.');
+      if(live) links+='<a class="cta" href="/p/'+live+'">'+esc(org2)+'의 과정 보기</a>';
+      if(cat2&&CATS[cat2]) links+='<a class="cta'+(live?' sub':'')+'" href="/c/'+cat2+'">'+esc(CATS[cat2])+' 취업률 순위 전체 보기</a>';
+    }
+    if(!links) return;
+    box.innerHTML=h+links;
+    var home=document.getElementById('home404'); // 복구 링크가 뜨면 홈은 보조 버튼으로 내린다
+    if(home) home.className='cta sub';
+    var g=document.getElementById('generic404'); // 카드가 구체적으로 설명하므로 일반 문구는 뺀다
+    if(g) g.style.display='none';
+    if(window.gtag) gtag('event','gone_recovered',{kind:kind,reason:e[0]==='c'?e[5]:0});
+  }).catch(function(){});
+})();
+<\/script>`;
+
 write('404.html', layout({
   title: '페이지를 찾을 수 없어요 (404) | 내배카랭킹',
   desc: '요청하신 페이지가 없거나 마감된 과정일 수 있습니다.',
   canonical: '/404', abs: true,
   content: `<header class="hero"><span class="kick">404</span>
 <h1>페이지를 찾을 수 없어요</h1>
-<p class="stat">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
-<a class="cta" href="/">취업률 랭킹 홈으로</a>
-<a class="cta sub" href="/g/">국비지원 가이드 보기</a>`,
+<p class="stat" id="generic404">주소가 바뀌었거나, 모집이 마감된 과정일 수 있어요.</p></header>
+<div id="recover"></div>
+<a class="cta" id="home404" href="/">취업률 랭킹 홈으로</a>
+<a class="cta sub" href="/g/">국비지원 가이드 보기</a>${gone404}`,
 }));
 
 // ---------- style + robots + sitemap ----------
 fs.copyFileSync(path.join(ROOT, 'assets', 'style.css'), path.join(PUB, 'style.css'));
-write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+// gone/ 은 404 복구용 JSON 자산이라 크롤 대상이 아니다 — C의 병목이 크롤 예산이라 명시적으로 막는다.
+write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /gone/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 {
   const urls = ['/', '/about', '/g/'];
   for (const g of pubGuides) urls.push(`/g/${g.slug}`);
