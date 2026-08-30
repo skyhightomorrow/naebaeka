@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { load, isMeaningful } = require('../lib/model');
 const { SIDO_SLUG, SIDO_NAME, esc } = require('../lib/normalize');
+const { guardPages } = require('./_page-guard');
 
 const ROOT = path.join(__dirname, '..');
 const PUB = path.join(ROOT, 'public');
@@ -213,7 +214,6 @@ const REGION_PAGES = new Map(M.regionCats.map(rc => [
 // 서치콘솔상 '학원명' 검색이 실제 유입 경로(게재순위 8~9위)로 확인되어 학원 단위 집계 페이지를 생성.
 // 유의미 과정이 2개 이상인 학원만 — 1개짜리는 과정 상세와 사실상 중복(thin)이라 제외.
 const ORG_PAGES = new Map(); // org명 → { instId, count }
-fs.rmSync(path.join(PUB, 'o'), { recursive: true, force: true }); // 조건 미달로 빠진 학원의 잔존 페이지 제거
 {
   const byOrg = new Map();
   for (const c of M.courses) {
@@ -233,6 +233,11 @@ fs.rmSync(path.join(PUB, 'o'), { recursive: true, force: true }); // 조건 미�
     if (!instId) continue;
     ORG_PAGES.set(o.org, { instId, count: o.courses.length });
   }
+
+  // 조건 미달로 빠진 학원의 잔존 페이지 제거 — 지우기 전에 급감 여부를 본다.
+  // 정상 churn 실측 하루 최대 4건(학원이 유의미 과정 2개 미만으로 내려감) → 허용 40.
+  guardPages(path.join(PUB, 'o'), [...ORG_PAGES.values()].map(p => p.instId), { label: '학원', max: 40 });
+  fs.rmSync(path.join(PUB, 'o'), { recursive: true, force: true });
 
   for (const o of byOrg.values()) {
     const page = ORG_PAGES.get(o.org);
@@ -282,7 +287,11 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
 }
 
 // ---------- 과정 상세 (유의미한 과정만: 취업률 보유 + 모집중 — thin/마감 페이지 미생성) ----------
-fs.rmSync(path.join(PUB, 'p'), { recursive: true, force: true }); // 제외된 과정의 잔존 페이지 제거(게이트 확정)
+// 제외된 과정의 잔존 페이지 제거(게이트 확정) — 지우기 전에 급감 여부를 본다.
+// ⚠️ C는 정상 삭제가 매일 발생한다(모집 마감분이 /p/에서 빠짐, 실측 하루 5~25건).
+//    그래서 D·F(허용 5)와 달리 넉넉히 잡아야 한다. 고용24 수집이 결손되면 수백~수천 건 단위로 빠진다.
+guardPages(path.join(PUB, 'p'), M.courses.filter(isMeaningful).map(c => c.courseId), { label: '과정 상세', max: 150 });
+fs.rmSync(path.join(PUB, 'p'), { recursive: true, force: true });
 for (const c of M.courses) {
   if (!isMeaningful(c)) continue;
   const catName = CAT_OF[c.cat] || '기타';
