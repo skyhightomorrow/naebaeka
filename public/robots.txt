@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /gone/
+Disallow: /s/
 
 Sitemap: https://naebaeka.com/sitemap.xml

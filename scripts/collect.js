@@ -40,6 +40,7 @@ function parseCards(html) {
       startDate: pm && pm[1], endDate: pm && pm[2],
       hours: g(/(\d+일,\s*총\d+시간)/),
       region: clean(g(/<p class="s1_r"[^>]*>\s*([^<(]+?)\s*(?:\(|<)/)),
+      tel: g(/<p class="s1_r"[^>]*>[^<(]*\(\s*([\d-]{9,14})\s*\)/), // 「서울 서초구 ( 02-577-8004 )」
       emplRate: (x => x ? Number(x[1]) : null)(c.match(/NCS직종 훈련기관 취업률:[\s\S]{0,300}?<em class="txt">([\d.]+)%<\/em>/)),
       remote: /원격훈련/.test(c),
       status: g(/<span class="t3_sb clr_red">([^<]+)<\/span>/),

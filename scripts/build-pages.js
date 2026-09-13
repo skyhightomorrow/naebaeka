@@ -1,7 +1,7 @@
 // 정적 페이지 전체 생성: index + 분야 + 지역×분야 + 과정 상세 + sitemap
 const fs = require('fs');
 const path = require('path');
-const { load, isMeaningful } = require('../lib/model');
+const { load, isMeaningful, trustScore } = require('../lib/model');
 const { SIDO_SLUG, SIDO_NAME, esc } = require('../lib/normalize');
 const { guardPages } = require('./_page-guard');
 
@@ -17,6 +17,33 @@ const ORIGIN = env.SITE_ORIGIN || 'https://naebaeka.com';
 const M = load();
 const won = n => n == null ? '-' : n.toLocaleString('en-US') + '원';
 const VISIBLE = 10;
+const enc = encodeURIComponent;
+// 화면·검색 인덱스·URL 파라미터가 모두 같은 시·도 표기를 쓰도록 한 곳에서 정한다(광주전남 → 광주·전남)
+const sidoName = s => SIDO_NAME[SIDO_SLUG[s]] || s || '';
+
+// 목록 칩 필터(/c/ = 시·도, /r/ = 시·군·구). 동작은 assets/filters.js. 값이 2개 미만이면 안 그린다.
+function chipBar(key, list, label, searchHref) {
+  const m = new Map();
+  for (const c of list) { const v = key === 'g' ? c.gu : sidoName(c.sido); if (v) m.set(v, (m.get(v) || 0) + 1); }
+  if (m.size < 2) return '';
+  const chips = [...m].sort((a, b) => b[1] - a[1]).map(([v, n]) => `<button type="button" data-v="${esc(v)}">${esc(v)} ${n}</button>`).join('');
+  return `<div class="fchips" data-key="${key}" aria-label="${label}"><button type="button" class="on" data-v="">전체 ${list.length}</button>${chips}</div>
+<a class="fsearch" href="${searchHref}">개강일·수강료순 정렬은 검색에서 보기 →</a><script defer src="../filters.js"></script>`;
+}
+
+// 위치·연락처 박스. 주소는 data/inst.json(고용24 과정 상세의 훈련 장소) — 없으면 학원명+동네로 지도 검색.
+// ⛔ 좌표를 만들거나 저장하지 않는다(지오코더·카카오 로컬 API 모두 결과 저장 금지). 카카오맵 검색 링크만 쓴다.
+const kakaoSearch = q => `https://map.kakao.com/link/search/${enc(q)}`;
+function locBox(c, org) {
+  const a = c.addr;
+  const place = `${sidoName(c.sido)} ${c.gu || ''}`.trim();
+  const mapQ = a ? a.addr.replace(/\s*\([^)]*\)\s*/g, ' ').trim() : `${org} ${place}`; // 「(인계동)」 같은 참고항목은 검색을 흐린다
+  const telDigits = (c.tel || '').replace(/\D/g, '');
+  return `<div class="locbox"><h2>위치·연락처</h2>
+<div class="addr">${esc(a ? a.addr : place)}${a && a.addrDetail ? `<small>${esc(a.addrDetail)}</small>` : ''}</div>
+<div class="lbtns">${telDigits.length >= 8 ? `<a class="call" href="tel:${telDigits}" data-ev="call_click">📞 ${esc(c.tel)}</a>` : ''}<a href="${esc(kakaoSearch(mapQ))}" target="_blank" rel="noopener" data-ev="map_click">🗺️ 카카오맵${a ? '에서 보기' : '에서 찾기'}</a>${a && a.web ? `<a href="${esc(a.web)}" target="_blank" rel="nofollow noopener" data-ev="web_click">홈페이지</a>` : ''}</div>
+<div class="note">${a ? '고용24에 등록된 훈련 장소예요.' : '아직 상세 주소를 확인하지 못해 학원명으로 지도를 검색해요.'} 방문·상담 전에 전화로 확인하세요.</div></div>`;
+}
 
 // 가이드 목록은 index·분야 페이지의 내부링크에도 쓰이므로 먼저 계산 (실제 파일 생성은 아래 가이드 섹션에서)
 const { guides } = require('../lib/guides');
@@ -51,7 +78,7 @@ function write(rel, html) {
 // abs=true → 자산·홈 링크를 절대경로로. 404 페이지 전용:
 // CF Pages는 미매칭 경로에 404.html을 "그 경로 그대로" 서빙하므로(/g/xxx, /o/xxx …),
 // 상대경로(depth=0 기준)를 쓰면 /g/style.css 처럼 어긋나 스타일·파비콘이 전부 깨진다.
-function layout({ title, desc, canonical, content, jsonld, depth = 0, abs = false }) {
+function layout({ title, desc, canonical, content, jsonld, depth = 0, abs = false, noindex = false, noSearch = false }) {
   const p = abs ? '/' : '../'.repeat(depth);
   const home = abs ? '/' : `${p}./`;
   return `<!doctype html><html lang="ko"><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -61,6 +88,7 @@ function layout({ title, desc, canonical, content, jsonld, depth = 0, abs = fals
 <link rel="icon" href="${p}favicon.svg" type="image/svg+xml">
 <link rel="icon" href="${p}favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="${p}apple-touch-icon.png">
+${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <link rel="canonical" href="${ORIGIN}${canonical}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="내배카랭킹">
@@ -79,11 +107,14 @@ ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script
 </head><body>
 <div class="wrap">
 <div class="top"><a class="brand" href="${home}">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
+${noSearch ? '' : `<form class="hsearch" action="${abs ? '/' : p}search" role="search"><input type="search" name="q" placeholder="과목·학원·동네 검색 (예: 엑셀, 강남구)" aria-label="과정 검색" enterkeyhint="search"><button>검색</button></form>`}
 ${content}
 <footer class="ft">취업률은 고용노동부 고용24 공시 기준(2024년 종료 과정 · NCS직종별 훈련기관 평균)입니다.<br>
 본 사이트는 공식 고용24가 아니며, 공시 데이터를 재구성한 정보 서비스입니다 · 데이터 매일 자동 갱신<br>
 <a href="${p}about">소개</a> · <a href="${p}privacy">개인정보처리방침</a> · <a href="${p}g/">가이드</a></footer>
-</div></body></html>`;
+</div>
+<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-ev]');if(a&&window.gtag)gtag('event',a.getAttribute('data-ev'),{link_url:a.href})});</script>
+</body></html>`;
 }
 
 const tabs = (activeSlug, depth = 0) => {
@@ -102,7 +133,7 @@ const moreBtn = (hiddenCount, label) => hiddenCount > 0
 const detailHref = (c, depth) => '../'.repeat(depth) + 'p/' + c.courseId;
 
 function courseRow(c, i, depth, { showCat = false } = {}) {
-  return `<a class="row t${i + 1}${i >= VISIBLE ? ' hid' : ''}" href="${detailHref(c, depth)}">
+  return `<a class="row t${i + 1}${i >= VISIBLE ? ' hid' : ''}" href="${detailHref(c, depth)}" data-s="${esc(sidoName(c.sido))}" data-g="${esc(c.gu || '')}">
 <div class="rank">${i + 1}</div>
 <div class="info"><div class="ct">${esc(c.title)}</div>
 <div class="meta"><span class="org">${esc(c.org)}</span>${c.certGrade ? `<span class="certb">${c.certGrade}</span>` : ''}${showCat ? `<span class="catb">${c.catName || ''}</span>` : ''}<span>${esc((c.region || '').split(' ').slice(0, 2).join(' '))}</span>${c.status === '모집중' ? '<span><span class="dot"></span>모집중</span>' : ''}</div></div>
@@ -120,17 +151,32 @@ function courseRow(c, i, depth, { showCat = false } = {}) {
 <div class="meta"><span class="org">${esc(g.org)}</span>${g.certGrade ? `<span class="certb">${g.certGrade}</span>` : ''}<span class="catb">${g.catName}</span><span>${esc((g.best.region || '').split(' ').slice(0, 2).join(' '))}</span></div></div>
 <div class="rt"><div class="big">${g.rate}%${g.rate >= 95 ? '<sup>†</sup>' : ''}</div><div class="lb">학원 취업률</div></div></a>`).join('\n');
 
+  // 우리 동네 찾기: 시·도(1클릭) → 시·군·구(2클릭) → 검색 페이지 목록. <details>라 JS 없이 동작.
+  const hoodMap = new Map();
+  for (const c of M.courses) {
+    if (!isMeaningful(c) || !c.gu) continue;
+    const s = sidoName(c.sido);
+    if (!hoodMap.has(s)) hoodMap.set(s, new Map());
+    hoodMap.get(s).set(c.gu, (hoodMap.get(s).get(c.gu) || 0) + 1);
+  }
+  const hoodTotal = gm => [...gm.values()].reduce((a, b) => a + b, 0);
+  const hood = [...hoodMap].sort((a, b) => hoodTotal(b[1]) - hoodTotal(a[1])).map(([s, gm]) =>
+    `<details><summary>${esc(s)} <span>${gm.size}곳 · 과정 ${hoodTotal(gm)}개</span></summary><div class="gus"><a href="search?sd=${enc(s)}">${esc(s)} 전체</a>${
+      [...gm].sort((a, b) => b[1] - a[1]).map(([g, n]) => `<a href="search?sd=${enc(s)}&amp;g=${enc(g)}">${esc(g)} ${n}</a>`).join('')}</div></details>`).join('');
+
   const regionLinks = M.regionCats.slice().sort((a, b) => b.ranked.length - a.ranked.length).slice(0, 24)
     .map(rc => `<a href="r/${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}">${SIDO_NAME[SIDO_SLUG[rc.sido]] || rc.sido} ${rc.catName}</a>`).join('');
 
   const content = `
 <header class="hero"><span class="kick">내일배움카드 · 국비지원 학원 비교</span>
 <h1>내일배움카드로 무엇을 배우면<br><em>진짜 취업</em>될까?</h1>
-<p class="stat">전국 <b>${totalRanked}</b>개 과정 · 학원 ${M.overall.length}곳 비교 · 평균 <b>${avgAll}%</b> · ${M.generatedAt} 기준</p></header>
+<p class="stat">전국 <b>${totalRanked}</b>개 과정 · 학원 ${M.overall.length}곳 비교 · 평균 <b>${avgAll}%</b> · ${M.generatedAt} 기준</p>
+<p class="stat" style="margin-top:10px"><a href="#hood" style="color:var(--teal-d);font-weight:700;text-decoration:none">📍 우리 동네 과정 찾기 ↓</a></p></header>
 ${tabs('all')}
 ${rows}
 ${moreBtn(top.length - VISIBLE, '곳')}
 ${footNote(' 전체 랭킹은 학원×분야 단위로 묶어 대표 과정을 보여줘요.')}
+<div class="seclinks" id="hood"><h2>우리 동네 국비지원 과정 찾기</h2><div class="hood">${hood}</div></div>
 <div class="seclinks"><h2>지역별 국비지원 학원 취업률 순위</h2><div class="grid">${regionLinks}</div></div>
 <div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks([...CORE_GUIDES, ...pubGuides.map(g => g.slug).filter(s => !CORE_GUIDES.includes(s))], 0)}</div></div>`;
 
@@ -155,6 +201,7 @@ for (const cat of M.cats) {
 <h1>${cat.name}, 무엇을 배우면<br><em>진짜 취업</em>될까?</h1>
 <p class="stat">학원·과정 <b>${top.length}</b>개 비교 · 분야 평균 <b>${cat.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
 ${tabs(cat.slug, 1)}
+${chipBar('s', top, '시·도', `../search?c=${cat.slug}`)}
 ${rows}
 ${moreBtn(top.length - VISIBLE, '개 과정')}
 ${footNote()}
@@ -186,6 +233,7 @@ for (const rc of M.regionCats) {
 <h1>${name} ${rc.catName} 국비지원 학원<br><em>취업률 순위</em></h1>
 <p class="stat">학원·과정 <b>${rc.ranked.length}</b>개 · 평균 <b>${rc.avgRate}%</b> · ${M.generatedAt} 기준</p></header>
 ${tabs(rc.catSlug, 1)}
+${chipBar('g', rc.ranked, '시·군·구', `../search?c=${rc.catSlug}&amp;sd=${enc(name)}`)}
 ${rows}
 ${moreBtn(rc.ranked.length - VISIBLE, '개 과정')}
 ${footNote()}
@@ -256,12 +304,17 @@ const ORG_PAGES = new Map(); // org명 → { instId, count }
     const topCat = top ? (CAT_OF[top.cat] || '') : '';
     const rp = top ? REGION_PAGES.get(`${top.sido}|${top.cat}`) : null; // sido는 모델이 이미 계산해 둠
     const bestRate = rates && rates.size ? Math.max(...rates.values()) : null;
+    // 지점이 여러 곳이면 주소별로 최대 3개. 주소 캐시가 아직 없으면 대표 과정으로 지도 검색 박스 1개.
+    const locs = [...new Map(o.courses.filter(c => c.addr).map(c => [c.addr.addr, c])).values()];
+    const locHtml = (locs.length ? locs.slice(0, 3) : o.courses.slice(0, 1)).map(c => locBox(c, o.org)).join('');
+    const firstLoc = locs[0] || o.courses.find(c => c.tel);
 
     const content = `
 <nav class="crumb"><a href="../">전체</a>${topCat && CAT_SLUG_OF[topCat] ? ` › <a href="../c/${CAT_SLUG_OF[topCat]}">${topCat}</a>` : ''}</nav>
 <div class="dhead"><h1>${esc(o.org)}</h1>
 <div class="meta"><span class="org">${esc(regionList.slice(0, 2).join(' · '))}</span></div>
 <div class="badges">${o.certGrade ? `<span class="bdg">${o.certGrade}</span>` : ''}<span class="bdg gray">국비지원 과정 ${page.count}개</span></div></div>
+${locHtml}
 ${rateRows ? `<div class="ratebox">
 <h2 class="oh">직종별 학원 취업률</h2>
 <div class="oratelist">${rateRows}</div>
@@ -279,11 +332,54 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
       canonical: `/o/${page.instId}`, content, depth: 1,
       jsonld: {
         '@context': 'https://schema.org', '@type': 'EducationalOrganization', name: o.org,
-        ...(mainRegion ? { address: { '@type': 'PostalAddress', addressLocality: mainRegion, addressCountry: 'KR' } } : {}),
+        ...(mainRegion ? { address: { '@type': 'PostalAddress', addressLocality: mainRegion, addressCountry: 'KR',
+          ...(firstLoc && firstLoc.addr ? { streetAddress: firstLoc.addr.addr, ...(firstLoc.addr.zip ? { postalCode: firstLoc.addr.zip } : {}) } : {}) } } : {}),
+        ...(firstLoc && firstLoc.tel ? { telephone: firstLoc.tel } : {}),
       },
     }));
   }
   console.log(`학원 페이지: ${ORG_PAGES.size}곳 (유의미 과정 2개 이상)`);
+}
+
+// ---------- 검색 인덱스 + 검색 페이지 (/search) ----------
+// 사용자 피드백(2026-09-13): 분야 탭으로는 고를 수 있어도 "엑셀"·"포토샵" 같은 과목이나 동네로는 못 찾았다.
+// 서버가 없으니 과정 목록을 JSON으로 내보내고 assets/search.js가 브라우저에서 거른다.
+// 대상은 /p/ 페이지가 있는 과정(isMeaningful)만 — 검색 결과가 전부 사이트 안으로 이어지게.
+// 검색 페이지는 결과가 URL 파라미터로 바뀌는 조회 화면이라 noindex(색인 대상 페이지를 늘리지 않는다).
+{
+  const idx = M.courses.filter(isMeaningful)
+    .sort((a, b) => trustScore(b) - trustScore(a) || b.emplRate - a.emplRate || (a.costWon || 9e9) - (b.costWon || 9e9))
+    .map(c => {
+      const op = ORG_PAGES.get(c.org);
+      // 형식은 assets/search.js 머리 주석과 맞춘다
+      return [c.courseId, c.title, c.org || '', op ? op.instId : '', c.cat, sidoName(c.sido), c.gu || '', c.emplRate, c.startDate || '', c.costWon ?? null, c.certGrade || ''];
+    });
+  fs.rmSync(path.join(PUB, 's'), { recursive: true, force: true });
+  const json = JSON.stringify(idx);
+  write('s/idx.json', json);
+
+  const quick = ['엑셀', '컴활', '전산회계', '포토샵', '캐드', '바리스타', '한식', '제과제빵', '네일', '피부', '지게차', '용접', '파이썬', '영상편집'];
+  const content = `
+<header class="hero"><span class="kick">과목 · 학원 · 동네 검색</span>
+<h1>배우고 싶은 것,<br><em>우리 동네</em>에서 찾기</h1>
+<p class="stat">모집 중인 국비지원 과정 <b>${idx.length.toLocaleString()}</b>개 · ${M.generatedAt} 기준</p></header>
+<form class="sform" id="sform" role="search"><input class="sinput" id="sq" type="search" name="q" placeholder="예: 엑셀, 포토샵, 강남구, 학원 이름" autocomplete="off" enterkeyhint="search" aria-label="검색어"><button>검색</button></form>
+<div class="sctl"><select id="ssd" aria-label="시·도"><option value="">시·도 전체</option></select><select id="sg" aria-label="시·군·구" disabled><option value="">시·도를 먼저 고르세요</option></select><select id="sc" aria-label="분야"><option value="">분야 전체</option></select><select id="so" aria-label="정렬"><option value="trust">신뢰도순</option><option value="rate">취업률 높은순</option><option value="start">개강 빠른순</option><option value="cost">수강료 낮은순</option></select></div>
+<div id="sorgs"></div>
+<p class="scount" id="scount" hidden></p>
+<div class="shint" id="shint"><p>과목·학원·동네 이름을 입력하거나, 시·도와 시·군·구만 골라도 목록이 나와요.</p>
+<div class="qchips">${quick.map(w => `<a href="search?q=${enc(w)}" data-q="${esc(w)}">${esc(w)}</a>`).join('')}</div></div>
+<div id="sres"></div>
+${footNote(' 검색 결과도 기본은 신뢰도 순이고, 위에서 취업률·개강일·수강료 순으로 바꿀 수 있어요.')}
+<p class="foot-note">취업률이 공시되지 않은 신규 과정·원격 과정은 검색에 나오지 않아요. 전체 과정은 <a href="https://www.work24.go.kr/hr/a/a/1100/trnnCrsInf.do" target="_blank" rel="noopener">고용24</a>에서 볼 수 있습니다.</p>
+<script>window.NB_CATS=${JSON.stringify(CAT_OF).replace(/</g, '\\u003c')};window.NB_V=${JSON.stringify(M.generatedAt)};</script>
+<script src="search.js?v=${M.generatedAt}"></script>`;
+  write('search.html', layout({
+    title: '국비지원 과정 검색 — 과목·학원·동네로 찾기 | 내배카랭킹',
+    desc: '엑셀·포토샵·바리스타 같은 과목 이름, 학원 이름, 동네 이름으로 내일배움카드 국비지원 과정을 찾고 취업률로 비교하세요.',
+    canonical: '/search', content, noindex: true, noSearch: true,
+  }));
+  console.log(`검색 인덱스: ${idx.length}건 / ${(json.length / 1024).toFixed(0)}KB(문자 수 기준)`);
 }
 
 // ---------- 과정 상세 (유의미한 과정만: 취업률 보유 + 모집중 — thin/마감 페이지 미생성) ----------
@@ -324,6 +420,7 @@ ${rateBlock}
 <div class="fact"><div class="k">훈련시간</div><div class="v">${esc(c.hours || '-')}</div></div>
 <div class="fact"><div class="k">수강료 (지원 전)</div><div class="v">${won(c.costWon)}</div></div>
 </div>
+${locBox(c, org)}
 <p class="foot-note">수강료는 정부지원 전 금액이에요. 내일배움카드를 쓰면 훈련 유형과 개인 조건에 따라 45~100%까지 지원돼 실제 부담은 훨씬 적습니다. 정확한 자부담금·수강신청은 고용24에서 확인하세요.</p>
 <a class="cta" href="${work24}" target="_blank" rel="noopener">고용24에서 이 과정 검색하기</a>
 ${op ? `<a class="cta sub" href="../o/${op.instId}">${esc(org)}의 다른 과정 ${op.count - 1}개 · 직종별 취업률 보기</a>` : ''}
@@ -527,9 +624,9 @@ write('404.html', layout({
 }));
 
 // ---------- style + robots + sitemap ----------
-fs.copyFileSync(path.join(ROOT, 'assets', 'style.css'), path.join(PUB, 'style.css'));
+for (const f of ['style.css', 'search.js', 'filters.js']) fs.copyFileSync(path.join(ROOT, 'assets', f), path.join(PUB, f));
 // gone/ 은 404 복구용 JSON 자산이라 크롤 대상이 아니다 — C의 병목이 크롤 예산이라 명시적으로 막는다.
-write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /gone/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /gone/\nDisallow: /s/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 {
   const urls = ['/', '/about', '/g/'];
   for (const g of pubGuides) urls.push(`/g/${g.slug}`);

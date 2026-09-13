@@ -46,6 +46,11 @@ jobs:
       - name: Collect
         if: steps.guard.outputs.skip != 'true'
         run: timeout 20m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"
+      # 학원 지점 주소·전화·홈페이지(data/inst.json) 증분 수집 — 새 지점 + 90일 지난 것만, 회당 최대 40곳(약 1~2분).
+      # 전량(약 1,900곳)은 로컬에서 한 번 채워 커밋했다. 실패해도 기존 캐시로 빌드한다(주소 없는 곳은 학원명 지도 검색으로 대체).
+      - name: Collect institution addresses
+        if: steps.guard.outputs.skip != 'true'
+        run: timeout 4m node scripts/collect-inst.js 40 90 || echo "collect-inst failed/timeout - using existing cache"
       - name: Build
         if: steps.guard.outputs.skip != 'true'
         run: node scripts/build-pages.js
