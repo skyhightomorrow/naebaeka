@@ -17,6 +17,15 @@ const ORIGIN = env.SITE_ORIGIN || 'https://naebaeka.com';
 // (naebaeka.com·localhost:3360)으로 제한돼 있다. 무료 쿼터가 붙은 Boardville 앱(ID 1474743)의 Default JS Key.
 const KAKAO_JS_KEY = env.KAKAO_JS_KEY || '84f3eca6ecc3c7088fa9875481301709';
 
+// 정적 자산 캐시 무효화 버전 = 파일 내용 해시.
+// ⚠️ CF Pages는 JS/CSS에 `max-age=14400`(4시간)을 붙인다. 날짜(?v=YYYY-MM-DD)로 버전을 달면
+//    같은 날 두 번 배포할 때 주소가 같아 브라우저가 옛 파일을 계속 쓴다 — 2026-09-13에 새 HTML + 옛 search.js가
+//    섞여 검색 데이터 형식이 안 맞는 상태가 실제로 났다. 내용이 바뀌면 주소도 바뀌게 해시를 쓴다.
+const crypto = require('crypto');
+const hashOf = s => crypto.createHash('md5').update(s).digest('hex').slice(0, 10);
+const assetV = f => hashOf(fs.readFileSync(path.join(ROOT, 'assets', f)));
+const V = { css: assetV('style.css'), search: assetV('search.js'), map: assetV('map.js'), filters: assetV('filters.js') };
+
 const M = load();
 const won = n => n == null ? '-' : n.toLocaleString('en-US') + '원';
 const VISIBLE = 10;
@@ -31,7 +40,7 @@ function chipBar(key, list, label, searchHref) {
   if (m.size < 2) return '';
   const chips = [...m].sort((a, b) => b[1] - a[1]).map(([v, n]) => `<button type="button" data-v="${esc(v)}">${esc(v)} ${n}</button>`).join('');
   return `<div class="fchips" data-key="${key}" aria-label="${label}"><button type="button" class="on" data-v="">전체 ${list.length}</button>${chips}</div>
-<a class="fsearch" href="${searchHref}">개강일·수강료순 정렬은 검색에서 보기 →</a><script defer src="../filters.js"></script>`;
+<a class="fsearch" href="${searchHref}">개강일·수강료순 정렬은 검색에서 보기 →</a><script defer src="../filters.js?v=${V.filters}"></script>`;
 }
 
 // 위치·연락처 박스. 주소는 data/inst.json(고용24 과정 상세의 훈련 장소) — 없으면 학원명+동네로 지도 검색.
@@ -103,7 +112,7 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}">
 <meta name="twitter:image" content="${ORIGIN}/og.png">
-<link rel="stylesheet" href="${p}style.css">
+<link rel="stylesheet" href="${p}style.css?v=${V.css}">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-EJ1MQ3E3TW"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EJ1MQ3E3TW');</script>
@@ -386,9 +395,9 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
 <div id="sres"></div>
 ${footNote(' 검색 결과도 기본은 신뢰도 순이고, 위에서 취업률·개강일·수강료 순으로 바꿀 수 있어요.')}
 <p class="foot-note">취업률이 공시되지 않은 신규 과정·원격 과정은 검색에 나오지 않아요. 전체 과정은 <a href="https://www.work24.go.kr/hr/a/a/1100/trnnCrsInf.do" target="_blank" rel="noopener">고용24</a>에서 볼 수 있습니다.</p>
-<script>window.NB_CATS=${JSON.stringify(CAT_OF).replace(/</g, '\\u003c')};window.NB_V=${JSON.stringify(M.generatedAt)};window.NB_KAKAO=${JSON.stringify(KAKAO_JS_KEY)};</script>
-<script src="map.js?v=${M.generatedAt}"></script>
-<script src="search.js?v=${M.generatedAt}"></script>`;
+<script>window.NB_CATS=${JSON.stringify(CAT_OF).replace(/</g, '\\u003c')};window.NB_V=${JSON.stringify(hashOf(json))};window.NB_KAKAO=${JSON.stringify(KAKAO_JS_KEY)};</script>
+<script src="map.js?v=${V.map}"></script>
+<script src="search.js?v=${V.search}"></script>`;
   write('search.html', layout({
     title: '국비지원 과정 검색 — 과목·학원·동네로 찾기 | 내배카랭킹',
     desc: '엑셀·포토샵·바리스타 같은 과목 이름, 학원 이름, 동네 이름으로 내일배움카드 국비지원 과정을 찾고 취업률로 비교하세요.',
