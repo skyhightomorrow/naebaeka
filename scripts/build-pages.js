@@ -13,6 +13,9 @@ const env = {};
 const envPath = path.join(ROOT, '.env');
 if (fs.existsSync(envPath)) for (const l of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) { const m = l.match(/^([A-Z_]+)=(.*)$/); if (m) env[m[1]] = m[2].trim(); }
 const ORIGIN = env.SITE_ORIGIN || 'https://naebaeka.com';
+// 카카오맵 JavaScript 키 — 페이지에 그대로 노출되는 공개 키이고, 콘솔에서 허용 도메인
+// (naebaeka.com·localhost:3360)으로 제한돼 있다. 무료 쿼터가 붙은 Boardville 앱(ID 1474743)의 Default JS Key.
+const KAKAO_JS_KEY = env.KAKAO_JS_KEY || '84f3eca6ecc3c7088fa9875481301709';
 
 const M = load();
 const won = n => n == null ? '-' : n.toLocaleString('en-US') + '원';
@@ -347,15 +350,23 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
 // 대상은 /p/ 페이지가 있는 과정(isMeaningful)만 — 검색 결과가 전부 사이트 안으로 이어지게.
 // 검색 페이지는 결과가 URL 파라미터로 바뀌는 조회 화면이라 noindex(색인 대상 페이지를 늘리지 않는다).
 {
+  // 주소는 과정마다 반복되므로 따로 모아 번호로 참조한다(지도 핀용). 좌표는 넣지 않는다 — 브라우저가 실시간 변환.
+  const addrs = [], addrNo = new Map();
   const idx = M.courses.filter(isMeaningful)
     .sort((a, b) => trustScore(b) - trustScore(a) || b.emplRate - a.emplRate || (a.costWon || 9e9) - (b.costWon || 9e9))
     .map(c => {
       const op = ORG_PAGES.get(c.org);
+      let an = -1;
+      if (c.addr) {
+        const a = c.addr.addr.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); // 참고항목 「(인계동)」은 변환을 흐린다
+        if (!addrNo.has(a)) { addrNo.set(a, addrs.length); addrs.push(a); }
+        an = addrNo.get(a);
+      }
       // 형식은 assets/search.js 머리 주석과 맞춘다
-      return [c.courseId, c.title, c.org || '', op ? op.instId : '', c.cat, sidoName(c.sido), c.gu || '', c.emplRate, c.startDate || '', c.costWon ?? null, c.certGrade || ''];
+      return [c.courseId, c.title, c.org || '', op ? op.instId : '', c.cat, sidoName(c.sido), c.gu || '', c.emplRate, c.startDate || '', c.costWon ?? null, c.certGrade || '', an];
     });
   fs.rmSync(path.join(PUB, 's'), { recursive: true, force: true });
-  const json = JSON.stringify(idx);
+  const json = JSON.stringify({ rows: idx, addrs });
   write('s/idx.json', json);
 
   const quick = ['엑셀', '컴활', '전산회계', '포토샵', '캐드', '바리스타', '한식', '제과제빵', '네일', '피부', '지게차', '용접', '파이썬', '영상편집'];
@@ -365,14 +376,18 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
 <p class="stat">모집 중인 국비지원 과정 <b>${idx.length.toLocaleString()}</b>개 · ${M.generatedAt} 기준</p></header>
 <form class="sform" id="sform" role="search"><input class="sinput" id="sq" type="search" name="q" placeholder="예: 엑셀, 포토샵, 강남구, 학원 이름" autocomplete="off" enterkeyhint="search" aria-label="검색어"><button>검색</button></form>
 <div class="sctl"><select id="ssd" aria-label="시·도"><option value="">시·도 전체</option></select><select id="sg" aria-label="시·군·구" disabled><option value="">시·도를 먼저 고르세요</option></select><select id="sc" aria-label="분야"><option value="">분야 전체</option></select><select id="so" aria-label="정렬"><option value="trust">신뢰도순</option><option value="rate">취업률 높은순</option><option value="start">개강 빠른순</option><option value="cost">수강료 낮은순</option></select></div>
+<div class="vbar"><div class="seg"><button type="button" data-view="list" class="on">목록</button><button type="button" data-view="map">지도</button></div><button type="button" class="locbtn" id="slocate">📍 내 위치</button></div>
 <div id="sorgs"></div>
 <p class="scount" id="scount" hidden></p>
 <div class="shint" id="shint"><p>과목·학원·동네 이름을 입력하거나, 시·도와 시·군·구만 골라도 목록이 나와요.</p>
 <div class="qchips">${quick.map(w => `<a href="search?q=${enc(w)}" data-q="${esc(w)}">${esc(w)}</a>`).join('')}</div></div>
+<div id="smapwrap" hidden><div id="smap"></div><p class="mstat" id="mstat"></p><div id="scards"></div>
+<p class="foot-note">핀 위치는 고용24에 등록된 훈련 장소 주소를 카카오맵에서 찾은 결과예요. 방문 전 전화로 확인하세요. 내 위치는 브라우저 안에서만 쓰이고 저장되지 않아요.</p></div>
 <div id="sres"></div>
 ${footNote(' 검색 결과도 기본은 신뢰도 순이고, 위에서 취업률·개강일·수강료 순으로 바꿀 수 있어요.')}
 <p class="foot-note">취업률이 공시되지 않은 신규 과정·원격 과정은 검색에 나오지 않아요. 전체 과정은 <a href="https://www.work24.go.kr/hr/a/a/1100/trnnCrsInf.do" target="_blank" rel="noopener">고용24</a>에서 볼 수 있습니다.</p>
-<script>window.NB_CATS=${JSON.stringify(CAT_OF).replace(/</g, '\\u003c')};window.NB_V=${JSON.stringify(M.generatedAt)};</script>
+<script>window.NB_CATS=${JSON.stringify(CAT_OF).replace(/</g, '\\u003c')};window.NB_V=${JSON.stringify(M.generatedAt)};window.NB_KAKAO=${JSON.stringify(KAKAO_JS_KEY)};</script>
+<script src="map.js?v=${M.generatedAt}"></script>
 <script src="search.js?v=${M.generatedAt}"></script>`;
   write('search.html', layout({
     title: '국비지원 과정 검색 — 과목·학원·동네로 찾기 | 내배카랭킹',
@@ -504,6 +519,8 @@ write('privacy.html', layout({
 <p>사이트는 Google 애드센스 광고를 게재할 수 있습니다. Google을 포함한 제3자 광고 사업자는 쿠키를 사용해 이용자의 이전 방문 기록을 바탕으로 광고를 게재할 수 있습니다. Google의 광고 쿠키 사용으로 이용자에게 맞춤형 광고가 제공될 수 있으며, 이용자는 <a href="https://adssettings.google.com" rel="noopener" target="_blank">Google 광고 설정</a>에서 맞춤 광고를 해제할 수 있습니다.</p>
 <h2>통계 도구</h2>
 <p>서비스 개선을 위해 <b>Google Analytics(GA4)</b>, Cloudflare Web Analytics, 검색엔진 웹마스터 도구(Google Search Console·네이버 서치어드바이저) 등의 방문 통계 도구를 사용합니다. 이 과정에서 쿠키가 사용될 수 있으며, 수집되는 정보는 개인을 식별하지 않는 통계 정보(방문 수·페이지·유입 경로 등)입니다. Google Analytics의 데이터 수집을 원치 않으시면 <a href="https://tools.google.com/dlpage/gaoptout" rel="noopener" target="_blank">Google 애널리틱스 차단 브라우저 부가기능</a>을 이용할 수 있습니다.</p>
+<h2>위치 정보</h2>
+<p>검색 페이지의 <b>「내 위치」</b> 기능을 누르면 브라우저가 위치 권한을 묻고, 허용한 경우에만 현재 위치를 사용합니다. 위치는 가까운 학원을 정렬하고 해당 시·군·구를 고르기 위해 이용자의 브라우저 안에서만 쓰이며, 사이트가 서버로 받거나 저장하지 않습니다. 이 과정에서 지도 표시와 행정구역 확인을 위해 좌표가 <b>카카오맵 API</b>로 전달됩니다.</p>
 <h2>문의</h2>
 <p>개인정보 관련 문의: hello@naebaeka.com</p>
 <p class="small">시행일: 2026-07-12</p></article>`,
@@ -624,7 +641,7 @@ write('404.html', layout({
 }));
 
 // ---------- style + robots + sitemap ----------
-for (const f of ['style.css', 'search.js', 'filters.js']) fs.copyFileSync(path.join(ROOT, 'assets', f), path.join(PUB, f));
+for (const f of ['style.css', 'search.js', 'filters.js', 'map.js']) fs.copyFileSync(path.join(ROOT, 'assets', f), path.join(PUB, f));
 // gone/ 은 404 복구용 JSON 자산이라 크롤 대상이 아니다 — C의 병목이 크롤 예산이라 명시적으로 막는다.
 write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /gone/\nDisallow: /s/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 {

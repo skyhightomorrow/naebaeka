@@ -1,15 +1,17 @@
 // 검색 페이지(/search) — 과목·학원명·동네 검색 + 시·도/시·군·구/분야 필터 + 정렬.
 // 서버 없이 s/idx.json(빌드 시 생성)을 한 번 받아 브라우저에서 거른다.
-// 인덱스 행: [courseId, 과정명, 학원명, 학원페이지ID|'', 분야slug, 시도, 시군구, 취업률, 개강일, 수강료|null, 인증등급|'']
+// 인덱스: { rows, addrs } — 행: [courseId, 과정명, 학원명, 학원페이지ID|'', 분야slug, 시도, 시군구, 취업률, 개강일, 수강료|null, 인증등급|'', 주소번호|-1]
+//          addrs[주소번호] = 도로명 주소(지도 핀용, assets/map.js)
 // 행 순서 = 신뢰도 순(빌드의 trustScore) — '신뢰도순' 정렬은 원래 순서를 그대로 쓴다.
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var q = $('sq'), sd = $('ssd'), gu = $('sg'), cat = $('sc'), ord = $('so');
-  var out = $('sres'), cnt = $('scount'), orgBox = $('sorgs'), hint = $('shint');
+  var out = $('sres'), cnt = $('scount'), orgBox = $('sorgs'), hint = $('shint'), mapWrap = $('smapwrap');
   var CATS = window.NB_CATS || {};
   var P = new URLSearchParams(location.search);
   var PAGE = 30;
   var rows = [], hay = [], list = [], shown = 0;
+  var view = P.get('v') === 'map' ? 'map' : 'list', mapTimer = null;
 
   var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
   var norm = function (s) { return String(s || '').toLowerCase().replace(/[\s·.,()\[\]『』「」<>_\-\/+&]/g, ''); };
@@ -77,7 +79,16 @@
     cnt.innerHTML = any ? '과정 <b>' + list.length.toLocaleString() + '</b>개' + (list.length ? '' : ' — 검색어를 줄이거나 지역을 넓혀 보세요') : '';
     out.innerHTML = '';
     shown = 0;
-    if (any) more();
+    if (view === 'map') {
+      mapWrap.hidden = false;
+      // 타이핑 중엔 주소 변환을 쏟지 않게 입력이 멈춘 뒤 한 번만
+      clearTimeout(mapTimer);
+      var snapshot = list.slice();
+      mapTimer = setTimeout(function () { if (window.NBMap) NBMap.show(snapshot, !!any); }, 450);
+    } else {
+      mapWrap.hidden = true;
+      if (any) more();
+    }
     sync();
     track(terms.join(' '), s, g, c);
   }
@@ -108,6 +119,7 @@
     if (gu.value) u.set('g', gu.value);
     if (cat.value) u.set('c', cat.value);
     if (ord.value !== 'trust') u.set('o', ord.value);
+    if (view === 'map') u.set('v', 'map');
     var qs = u.toString();
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   }
@@ -128,6 +140,41 @@
   $('sform').addEventListener('submit', function (e) { e.preventDefault(); q.blur(); run(); });
   sd.addEventListener('change', function () { P.delete('g'); fillGu(); run(); });
   [gu, cat, ord].forEach(function (el) { el.addEventListener('change', run); });
+  function setView(v) {
+    view = v;
+    [].forEach.call(document.querySelectorAll('.seg button'), function (b) { b.classList.toggle('on', b.getAttribute('data-view') === v); });
+    if (v === 'map' && window.gtag) gtag('event', 'map_open', {});
+    run();
+  }
+  [].forEach.call(document.querySelectorAll('.seg button'), function (b) {
+    b.addEventListener('click', function () { if (b.getAttribute('data-view') !== view) setView(b.getAttribute('data-view')); });
+  });
+  $('slocate').addEventListener('click', function () {
+    if (view !== 'map') setView('map');
+    if (window.NBMap) NBMap.locate();
+  });
+
+  // 내 위치의 행정구역(카카오 coord2RegionCode)을 검색 필터 값으로 옮긴다. 이미 시·도를 골라 뒀으면 건드리지 않는다.
+  var SIDO_FULL = { '충청북도': '충북', '충청남도': '충남', '전라북도': '전북', '전북특별자치도': '전북', '전라남도': '전남',
+    '경상북도': '경북', '경상남도': '경남', '강원도': '강원', '강원특별자치도': '강원', '제주특별자치도': '제주', '세종특별자치시': '세종' };
+  window.NBSearch = {
+    applyRegion: function (d1, d2) {
+      if (sd.value || !d1) return false;
+      var opts = [].slice.call(sd.options).map(function (o) { return o.value; }).filter(Boolean);
+      var s = SIDO_FULL[d1] || d1.slice(0, 2);
+      // 고용24 데이터는 광주·전남을 한 지역으로 준다(2026-07 통합). 카카오 표기가 무엇이든 그쪽으로 맞춘다.
+      if (/광주|전남|전라남/.test(d1) && opts.indexOf('광주·전남') >= 0) s = '광주·전남';
+      if (opts.indexOf(s) < 0) return false;
+      sd.value = s;
+      P.delete('g');
+      fillGu();
+      var gs = [].slice.call(gu.options).map(function (o) { return o.value; }).filter(Boolean);
+      gu.value = gs.indexOf(d2) >= 0 ? d2 : (gs.filter(function (v) { return d2 && (d2.indexOf(v) === 0 || v.indexOf(d2) === 0); })[0] || '');
+      run();
+      return true;
+    },
+  };
+
   document.querySelectorAll('[data-q]').forEach(function (a) {
     a.addEventListener('click', function (e) { e.preventDefault(); q.value = a.getAttribute('data-q'); run(); });
   });
@@ -135,7 +182,9 @@
   cnt.hidden = false;
   cnt.textContent = '과정 목록 불러오는 중…';
   fetch('s/idx.json?v=' + (window.NB_V || '')).then(function (r) { return r.json(); }).then(function (data) {
-    rows = data;
+    rows = Array.isArray(data) ? data : data.rows;
+    window.NB_ADDRS = data.addrs || [];
+    [].forEach.call(document.querySelectorAll('.seg button'), function (b) { b.classList.toggle('on', b.getAttribute('data-view') === view); });
     hay = rows.map(function (r) { return norm(r[1] + r[2] + r[5] + (r[6] || '') + (CATS[r[4]] || '')); });
     q.value = P.get('q') || '';
     ord.value = P.get('o') || 'trust';
