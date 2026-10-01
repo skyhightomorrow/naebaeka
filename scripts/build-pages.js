@@ -137,7 +137,7 @@ const tabs = (activeSlug, depth = 0) => {
 };
 
 const footNote = (extra = '') => `<p class="foot-note"><b>순서는 '신뢰도 순'이에요.</b> 취업률이 높은 순이 아니라, 취업률에 <b>기관 인증</b>과 <b>표본 신뢰도</b>를 반영한 순서예요. 100%처럼 완벽한 수치는 수료 인원이 적은 곳(예: 10명 중 10명)에서 나오기 쉬워서, 인증받은 기관의 안정적인 90%대가 위로 올라옵니다. 표시되는 %는 모두 고용노동부가 공시한 실제 취업률이에요.${extra}</p>
-<details class="basis"><summary>취업률은 어떻게 계산되나요?</summary><p>취업률은 과정이 아니라 <b>학원×직종 단위</b>입니다 — 그 학원이 2024년에 배출한 같은 직종 수료생(10명 이상, 진학·입대자 제외)이 실제 취업한 비율(수료 후 취업인원 ÷ 정상수료인원). 수료자 10명 미만이거나 신규 과정은 공시가 없어 순위에서 빠집니다. <b>†</b>는 95% 이상(소표본 가능)을 표시합니다. 표본 인원까지 반영한 정밀 순위는 준비 중입니다.</p></details>`;
+<details class="basis"><summary>취업률은 어떻게 계산되나요?</summary><p>취업률은 과정이 아니라 <b>학원×직종 단위</b>입니다 — 그 학원이 2024년에 종료한 40시간 이상 과정에서 내일배움카드로 수료한 <b>실업자</b> 중 취업한 비율입니다(같은 직종 수료자 10명 이상일 때만 공시, 수료 후 취업인원 ÷ 정상수료인원). 재직자 과정에 붙은 수치도 그 학원 실업자 수료생의 값입니다. 수료자 10명 미만이거나 신규 과정은 공시가 없어 순위에서 빠집니다. <b>†</b>는 95% 이상(소표본 가능)을 표시합니다. 표본 인원까지 반영한 정밀 순위는 준비 중입니다.</p></details>`;
 
 const moreBtn = (hiddenCount, label) => hiddenCount > 0
   ? `<button class="more" onclick="document.querySelectorAll('.row.hid').forEach(e=>e.classList.remove('hid'));this.remove()">나머지 ${hiddenCount}${label} 더보기</button>` : '';
@@ -425,7 +425,7 @@ for (const c of M.courses) {
 <div class="ratebox">
 <div class="rline"><span class="huge">${c.emplRate}%${c.emplRate >= 95 ? '<sup>†</sup>' : ''}</span><span class="rlb">학원 취업률<br><span style="font-weight:400;color:var(--mut);font-size:11.5px">${esc(org)} · ${catName} 직종</span></span></div>
 <div class="why"><h2>이 취업률, 무슨 뜻인가요?</h2>
-"이 과정을 들으면 ${c.emplRate}% 취업"이라는 뜻이 <b>아닙니다</b>. 고용노동부는 취업률을 과정별이 아니라 <b>학원×직종 단위</b>로 공시합니다. 이 숫자는 ${esc(org)}이(가) 2024년에 배출한 <b>${catName} 계열 직종 수료생 전체(10명 이상)</b> 중 취업한 비율이에요.${c.emplRate >= 95 ? ' 100%에 가까운 수치는 수료 인원이 적은 소규모 기관에서 나오기 쉽습니다.' : ''}
+"이 과정을 들으면 ${c.emplRate}% 취업"이라는 뜻이 <b>아닙니다</b>. 고용노동부는 취업률을 과정별이 아니라 <b>학원×직종 단위</b>로 공시합니다. 이 숫자는 ${esc(org)}이(가) 2024년에 배출한 <b>이 과정과 같은 직종의 실업자 수료생(10명 이상)</b> 중 취업한 비율이에요.${c.emplRate >= 95 ? ' 100%에 가까운 수치는 수료 인원이 적은 소규모 기관에서 나오기 쉽습니다.' : ''}
  그래도 모든 학원이 같은 기준으로 공시되기 때문에, <b>"수료생이 실제로 취업까지 가는 학원"</b>을 고르는 신호로는 유용합니다.
 ${otherList.length ? `<p class="orgrates">📊 이 학원의 다른 분야 취업률: ${otherList.map(([k, v]) => `<b>${k}</b> ${v}%`).join(' · ')}</p>` : ''}
 </div></div>` : `
@@ -445,7 +445,7 @@ ${rateBlock}
 <div class="fact"><div class="k">수강료 (지원 전)</div><div class="v">${won(c.costWon)}</div></div>
 </div>
 ${locBox(c, org)}
-<p class="foot-note">수강료는 정부지원 전 금액이에요. 내일배움카드를 쓰면 훈련 유형과 개인 조건에 따라 45~100%까지 지원돼 실제 부담은 훨씬 적습니다. 정확한 자부담금·수강신청은 고용24에서 확인하세요.</p>
+<p class="foot-note">수강료는 정부지원 전 금액이에요. 내일배움카드를 쓰면 일반 과정은 보통 45~100%가 지원되지만, 과정 유형과 개인 조건에 따라 달라집니다(요양보호사 등 돌봄 특화과정은 90%를 먼저 부담한 뒤 취업 후 환급). 정확한 자부담금·수강신청은 고용24에서 확인하세요.</p>
 <a class="cta" href="${work24}" target="_blank" rel="noopener">고용24에서 이 과정 검색하기</a>
 ${op ? `<a class="cta sub" href="../o/${op.instId}">${esc(org)}의 다른 과정 ${op.count - 1}개 · 직종별 취업률 보기</a>` : ''}
 <a class="cta sub" href="../c/${c.cat}">${catName} 취업률 순위 전체 보기</a>

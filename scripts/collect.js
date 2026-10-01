@@ -28,7 +28,13 @@ function parseCards(html) {
   while ((m = re.exec(html))) cards.push({ html: m[0], courseId: m[1], round: m[2] });
   return cards.map(({ html: c, courseId, round }) => {
     const g = rx => { const mm = c.match(rx); return mm ? mm[1].trim() : null; };
-    const pm = c.match(/(\d{4}-\d{2}-\d{2})\s*~[\s\S]*?(\d{4}-\d{2}-\d{2})/);
+    // 🔴 카드에는 «다른 회차» 선택 목록(<option> 6회차 2026-10-06 ~ 2026-11-05)이 본 회차 날짜보다 앞에 온다.
+    //    카드의 첫 «날짜 ~ 날짜»를 잡으면 다른 회차 날짜가 저장된다(2026-10-01 점검: 표본 70장 중 23장이 틀렸다).
+    //    본 회차 날짜는 <span class="time item …">2026-10-01 ~ 2026-11-26 (5회차)</span> 에 있다.
+    const pm =
+      c.match(/class="time item[^"]*"[^>]*>\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/) ||
+      c.match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})\s*\(\s*\d+\s*회차\s*\)/) ||
+      c.replace(/<select[\s\S]*?<\/select>/g, '').match(/(\d{4}-\d{2}-\d{2})\s*~[\s\S]*?(\d{4}-\d{2}-\d{2})/);
     return {
       title: clean(g(/title="([^"]+?) 훈련과정 정보 새 창 열림"/)),
       courseId, round,
@@ -72,27 +78,50 @@ function parseCards(html) {
   const seenIds = new Set();       // 같은 것의 courseId 단위 — 사이트 공시 건수와 대조용
   let total = null, okPages = 0, failPages = 0, emptyStreak = 0;
 
-  for (let p = START; p < START + PAGES; p++) {
-    let html, ok = false;
-    for (let retry = 0; retry < 3 && !ok; retry++) {
+  // 🔴 고용24 목록은 pageSize를 무시하고 항상 10건씩 준다(2026-10-01 실측: 50·100을 줘도 10장).
+  //    1,400쪽이 넘어 한 쪽씩 돌면 워크플로의 20분 제한에 걸려 770쪽 안팎에서 끊겼고,
+  //    그러면 아래 «사라진 과정 정리»가 실행되지 않아 이미 개강한 과정이 '모집중'으로 남았다
+  //    (같은 날 실측: 색인 10,861개 중 6,229개가 개강일이 지난 과정). 그래서 여러 쪽을 동시에 받는다.
+  // 2026-10-01 실측(96쪽): 동시 4개 55초 · 8개 36초 · 12개 21초. 4개로는 전량(1,427쪽)에 20분이 넘게 걸려
+  // 워크플로 제한에 다시 걸린다. 8개면 9분 안팎이다.
+  const CONC = Number(process.env.COLLECT_CONC || 8);
+  const fetchPage = async (p) => {
+    for (let retry = 0; retry < 3; retry++) {
       try {
-        const res = await fetch(listUrl(p), { headers: { 'User-Agent': UA } });
-        html = await res.text();
-        ok = res.status === 200 && html.includes('t3_sb mt10');
-        if (!ok) await sleep(1500);
+        const res = await fetch(listUrl(p), { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30000) });
+        const html = await res.text();
+        if (res.status === 200 && html.includes('t3_sb mt10')) return html;
+        await sleep(1500);
       } catch (e) { await sleep(2000); }
     }
-    if (!ok) { failPages++; console.log(`page ${p}: 실패(스킵)`); continue; }
-    okPages++;
-    if (total == null) { const t = html.match(/총&nbsp;<span[^>]*>([\d,]+)<\/span>건/); total = t ? t[1] : '?'; }
-    const cards = parseCards(html);
-    // 데이터가 끝난 뒤의 빈 페이지가 이어지면 조기 종료 (뒤쪽 수백 페이지를 헛돌지 않게)
-    emptyStreak = cards.length === 0 ? emptyStreak + 1 : 0;
-    for (const x of cards) { const k = x.courseId + '_' + x.round; seen.add(k); seenIds.add(x.courseId); map.set(k, x); }
-    if (p % 10 === 0 || p === START) console.log(`page ${p}: +${cards.length} (누적 ${map.size} / 전체 ${total})`);
-    if (p % 25 === 0) save();   // 중간 저장(진행분 보존). 매 페이지 저장은 7MB 쓰기를 1500회 반복해 낭비인 데다 kill 창만 넓힌다
-    if (emptyStreak >= 3) { console.log(`page ${p}: 빈 페이지 3연속 — 목록 끝으로 보고 종료`); break; }
-    await sleep(500);
+    return null;
+  };
+  let stop = false;
+  let lastPage = START + PAGES - 1;
+  for (let p = START; p <= lastPage && !stop; p += CONC) {
+    const pages = [];
+    for (let q = p; q <= Math.min(p + CONC - 1, lastPage); q++) pages.push(q);
+    const htmls = await Promise.all(pages.map(fetchPage));
+    for (let i = 0; i < pages.length; i++) {
+      const pg = pages[i], html = htmls[i];
+      if (!html) { failPages++; console.log(`page ${pg}: 실패(스킵)`); continue; }
+      okPages++;
+      if (total == null) {
+        const t = html.match(/총&nbsp;<span[^>]*>([\d,]+)<\/span>건/); total = t ? t[1] : '?';
+        // 공시 건수로 마지막 쪽을 계산해 거기서 멈춘다. 예전에는 1500쪽까지 돌며 목록이 끝난 뒤의 빈 쪽 70여 개를
+        // 3번씩 재시도하느라 몇 분을 버렸고, 그 실패가 실패율(5% 기준)에도 잡혔다.
+        const nTotal = Number(String(total).replace(/,/g, ''));
+        if (nTotal > 0) lastPage = Math.min(lastPage, START - 1 + Math.ceil(nTotal / 10) + 2);
+      }
+      const cards = parseCards(html);
+      // 데이터가 끝난 뒤의 빈 페이지가 이어지면 조기 종료 (뒤쪽 수백 페이지를 헛돌지 않게)
+      emptyStreak = cards.length === 0 ? emptyStreak + 1 : 0;
+      for (const x of cards) { const k = x.courseId + '_' + x.round; seen.add(k); seenIds.add(x.courseId); map.set(k, x); }
+      if (pg % 40 === 0 || pg === START) console.log(`page ${pg}: +${cards.length} (누적 ${map.size} / 전체 ${total})`);
+      if (emptyStreak >= 3) { console.log(`page ${pg}: 빈 페이지 3연속 — 목록 끝으로 보고 종료`); stop = true; break; }
+    }
+    if ((p - START) % 100 < CONC) save();   // 중간 저장(진행분 보존)
+    await sleep(400);
   }
 
   save();   // 마지막 중간 저장 이후 수집분 반영
