@@ -16,7 +16,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 45   # 잡 전체 백스톱 — 어느 스텝이든 매달리면 강제 종료(2026-07-13 collect 무한대기로 3시간 in_progress 사고 방지)
+    timeout-minutes: 60   # 잡 전체 백스톱 — 어느 스텝이든 매달리면 강제 종료(2026-07-13 collect 무한대기로 3시간 in_progress 사고 방지)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +48,8 @@ jobs:
       # ⚠️ 2026-10-01: 20분 제한에 매일 걸려(한 쪽씩 1,400쪽) 수집이 770쪽 안팎에서 끊겼고, 그래서 «사라진 과정 정리»가
       #    두 달 가까이 실행되지 않았다. 지금은 collect가 8쪽씩 동시에 받아 9분 안팎에 끝난다(로컬 실측).
       #    여유를 두어 30분으로 올린다. 그래도 끊기면 빌드가 개강일이 지난 회차를 걸러내므로 '모집중' 오표시는 생기지 않는다.
-        run: timeout 30m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"
+      #    2026-10-01 추가: 상대 서버 부담을 줄이려고 동시 3쪽으로 낮췄다(20분 남짓). 제한은 40분.
+        run: timeout 40m node scripts/collect.js 1500 1 || echo "collect failed/timeout - using existing data"
       # 학원 지점 주소·전화·홈페이지(data/inst.json) 증분 수집 — 새 지점 + 90일 지난 것만, 회당 최대 40곳(약 1~2분).
       # 전량(약 1,900곳)은 로컬에서 한 번 채워 커밋했다. 실패해도 기존 캐시로 빌드한다(주소 없는 곳은 학원명 지도 검색으로 대체).
       - name: Collect institution addresses

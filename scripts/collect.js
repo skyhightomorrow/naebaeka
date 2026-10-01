@@ -6,7 +6,9 @@ const { certGradeOf } = require('../lib/cert');
 
 const PAGES = Number(process.argv[2] || 60);
 const START = Number(process.argv[3] || 1);
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+// 수집기 신원을 밝힌다 — 고용24 운영 측이 누가 무엇 때문에 접속하는지 알 수 있어야 하고, 문제가 있으면 연락할 수 있어야 한다.
+// (2026-10-01까지는 일반 브라우저 UA로 접속했다. 같은 날 이 UA로도 목록이 정상 응답하는 것을 확인.)
+const UA = 'Mozilla/5.0 (compatible; naebaeka-bot/1.0; +https://naebaeka.com/about; hello@naebaeka.com)';
 const today = new Date();
 const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const end = new Date(today); end.setFullYear(end.getFullYear() + 1);
@@ -84,7 +86,9 @@ function parseCards(html) {
   //    (같은 날 실측: 색인 10,861개 중 6,229개가 개강일이 지난 과정). 그래서 여러 쪽을 동시에 받는다.
   // 2026-10-01 실측(96쪽): 동시 4개 55초 · 8개 36초 · 12개 21초. 4개로는 전량(1,427쪽)에 20분이 넘게 걸려
   // 워크플로 제한에 다시 걸린다. 8개면 9분 안팎이다.
-  const CONC = Number(process.env.COLLECT_CONC || 8);
+  // 2026-10-01 정정: 8개 동시 요청은 상대 서버에 주는 부담에 비해 과하다(고용24 약관 제14조의2 «과도한 트래픽»).
+  // 기본 3개로 낮추고 묶음 사이 간격을 둔다. 전량에 20분 남짓 걸리므로 워크플로 제한은 40분으로 맞춘다.
+  const CONC = Number(process.env.COLLECT_CONC || 3);
   const fetchPage = async (p) => {
     for (let retry = 0; retry < 3; retry++) {
       try {
@@ -121,7 +125,7 @@ function parseCards(html) {
       if (emptyStreak >= 3) { console.log(`page ${pg}: 빈 페이지 3연속 — 목록 끝으로 보고 종료`); stop = true; break; }
     }
     if ((p - START) % 100 < CONC) save();   // 중간 저장(진행분 보존)
-    await sleep(400);
+    await sleep(600);
   }
 
   save();   // 마지막 중간 저장 이후 수집분 반영

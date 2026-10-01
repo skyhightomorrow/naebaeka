@@ -1,7 +1,7 @@
 // 정적 페이지 전체 생성: index + 분야 + 지역×분야 + 과정 상세 + sitemap
 const fs = require('fs');
 const path = require('path');
-const { load, isMeaningful, trustScore } = require('../lib/model');
+const { load, isMeaningful, trustScore, orgKey } = require('../lib/model');
 const { SIDO_SLUG, SIDO_NAME, esc } = require('../lib/normalize');
 const { guardPages } = require('./_page-guard');
 
@@ -118,12 +118,12 @@ ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EJ1MQ3E3TW');</script>
 </head><body>
 <div class="wrap">
-<div class="top"><a class="brand" href="${home}">내배카랭킹</a><span class="pill">고용노동부 공시 데이터</span></div>
+<div class="top"><a class="brand" href="${home}">내배카랭킹</a><span class="pill">출처: 고용24 공시 · 비공식</span></div>
 ${noSearch ? '' : `<form class="hsearch" action="${abs ? '/' : p}search" role="search"><input type="search" name="q" placeholder="과목·학원·동네 검색 (예: 엑셀, 강남구)" aria-label="과정 검색" enterkeyhint="search"><button>검색</button></form>`}
 ${content}
 <footer class="ft">취업률은 고용노동부 고용24 공시 기준(2024년 종료 과정 · NCS직종별 훈련기관 평균)입니다.<br>
-본 사이트는 공식 고용24가 아니며, 공시 데이터를 재구성한 정보 서비스입니다 · 데이터 매일 자동 갱신<br>
-<a href="${p}about">소개</a> · <a href="${p}privacy">개인정보처리방침</a> · <a href="${p}g/">가이드</a></footer>
+본 사이트는 고용노동부·고용24와 무관한 개인 운영 정보 서비스입니다. 공시 데이터를 하루 한 번 수집해 재구성하며, 모집 상태·일정·수강료는 <a href="https://www.work24.go.kr" target="_blank" rel="noopener">고용24</a>가 기준입니다.<br>
+<a href="${p}about">소개</a> · <a href="${p}terms">이용안내·정정 요청</a> · <a href="${p}privacy">개인정보처리방침</a> · <a href="${p}g/">가이드</a></footer>
 </div>
 <script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-ev]');if(a&&window.gtag)gtag('event',a.getAttribute('data-ev'),{link_url:a.href})});</script>
 </body></html>`;
@@ -136,8 +136,13 @@ const tabs = (activeSlug, depth = 0) => {
       `<a class="tab${activeSlug === c.slug ? ' on' : ''}" href="${p}c/${c.slug}">${c.name}</a>`).join('') + '</div>';
 };
 
-const footNote = (extra = '') => `<p class="foot-note"><b>순서는 '신뢰도 순'이에요.</b> 취업률이 높은 순이 아니라, 취업률에 <b>기관 인증</b>과 <b>표본 신뢰도</b>를 반영한 순서예요. 100%처럼 완벽한 수치는 수료 인원이 적은 곳(예: 10명 중 10명)에서 나오기 쉬워서, 인증받은 기관의 안정적인 90%대가 위로 올라옵니다. 표시되는 %는 모두 고용노동부가 공시한 실제 취업률이에요.${extra}</p>
+const footNote = (extra = '') => `<p class="foot-note"><b>순서는 '신뢰도 순'이에요(내배카랭킹 자체 기준).</b> 고용노동부가 매긴 순위가 아니고, 취업률이 높은 순도 아니라, 취업률에 <b>기관 인증</b>과 <b>표본 신뢰도</b>를 반영한 순서예요. 100%처럼 완벽한 수치는 수료 인원이 적은 곳(예: 10명 중 10명)에서 나오기 쉬워서, 인증받은 기관의 안정적인 90%대가 위로 올라옵니다. 표시되는 %는 모두 고용노동부가 공시한 실제 취업률이에요.${extra}</p>
 <details class="basis"><summary>취업률은 어떻게 계산되나요?</summary><p>취업률은 과정이 아니라 <b>학원×직종 단위</b>입니다 — 그 학원이 2024년에 종료한 40시간 이상 과정에서 내일배움카드로 수료한 <b>실업자</b> 중 취업한 비율입니다(같은 직종 수료자 10명 이상일 때만 공시, 수료 후 취업인원 ÷ 정상수료인원). 재직자 과정에 붙은 수치도 그 학원 실업자 수료생의 값입니다. 수료자 10명 미만이거나 신규 과정은 공시가 없어 순위에서 빠집니다. <b>†</b>는 95% 이상(소표본 가능)을 표시합니다. 표본 인원까지 반영한 정밀 순위는 준비 중입니다.</p></details>`;
+
+// 분야별 공시 취업률 범위 표기(lib/model.js orgRates). 값이 하나면 그대로, 여럿이면 최소~최대.
+const rateRange = r => r.min === r.max ? `${r.max}%` : `${r.min}~${r.max}%`;
+// 수집일·기준 고지 — 과정·학원 페이지에 붙인다. 수집은 하루 한 번이라 그 사이 고용24에서 바뀐 내용은 반영되지 않는다.
+const srcNote = (depth = 0) => `<p class="foot-note">고용24 수집일 <b>${M.generatedAt}</b> · 취업률은 고용24 공시값 그대로입니다. 모집 상태·일정·수강료는 수집 이후 바뀔 수 있으니 <b>고용24가 기준</b>이에요. 틀린 내용은 <a href="${'../'.repeat(depth)}terms">정정 요청</a>으로 알려 주세요.</p>`;
 
 const moreBtn = (hiddenCount, label) => hiddenCount > 0
   ? `<button class="more" onclick="document.querySelectorAll('.row.hid').forEach(e=>e.classList.remove('hid'));this.remove()">나머지 ${hiddenCount}${label} 더보기</button>` : '';
@@ -187,7 +192,7 @@ function courseRow(c, i, depth, { showCat = false } = {}) {
 ${tabs('all')}
 ${rows}
 ${moreBtn(top.length - VISIBLE, '곳')}
-${footNote(' 전체 랭킹은 학원×분야 단위로 묶어 대표 과정을 보여줘요.')}
+${footNote(' 전체 랭킹은 학원×분야 단위로 묶어 대표 과정을 보여줘요. 분야 구분도 과정명을 기준으로 한 자체 분류예요.')}
 <div class="seclinks" id="hood"><h2>우리 동네 국비지원 과정 찾기</h2><div class="hood">${hood}</div></div>
 <div class="seclinks"><h2>지역별 국비지원 학원 취업률 순위</h2><div class="grid">${regionLinks}</div></div>
 <div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks([...CORE_GUIDES, ...pubGuides.map(g => g.slug).filter(s => !CORE_GUIDES.includes(s))], 0)}</div></div>`;
@@ -273,13 +278,15 @@ const REGION_PAGES = new Map(M.regionCats.map(rc => [
 // ---------- 학원(기관) 페이지 ----------
 // 서치콘솔상 '학원명' 검색이 실제 유입 경로(게재순위 8~9위)로 확인되어 학원 단위 집계 페이지를 생성.
 // 유의미 과정이 2개 이상인 학원만 — 1개짜리는 과정 상세와 사실상 중복(thin)이라 제외.
-const ORG_PAGES = new Map(); // org명 → { instId, count }
+const ORG_PAGES = new Map(); // 기관 ID(orgKey) → { instId, count }
 {
   const byOrg = new Map();
   for (const c of M.courses) {
     if (!c.org) continue;
-    if (!byOrg.has(c.org)) byOrg.set(c.org, { org: c.org, insts: [], courses: [], regions: new Set(), certGrade: null, total: 0 });
-    const o = byOrg.get(c.org);
+    // 이름이 아니라 기관 ID로 묶는다 — 이름만 같은 다른 기관의 과정·취업률이 한 페이지에 섞이지 않게(lib/model.js orgKey).
+    const k = orgKey(c);
+    if (!byOrg.has(k)) byOrg.set(k, { key: k, org: c.org, insts: [], courses: [], regions: new Set(), certGrade: null, total: 0 });
+    const o = byOrg.get(k);
     o.total++;
     if (c.instId) o.insts.push(c.instId);
     if (c.certGrade && !o.certGrade) o.certGrade = c.certGrade;
@@ -289,9 +296,9 @@ const ORG_PAGES = new Map(); // org명 → { instId, count }
 
   for (const o of byOrg.values()) {
     if (o.courses.length < 2) continue; // thin 방지
-    const instId = o.insts.slice().sort()[0]; // 같은 이름에 지점 여러 개면 가장 작은 ID로 고정(결정적)
+    const instId = o.insts[0];
     if (!instId) continue;
-    ORG_PAGES.set(o.org, { instId, count: o.courses.length });
+    ORG_PAGES.set(o.key, { instId, count: o.courses.length });
   }
 
   // 조건 미달로 빠진 학원의 잔존 페이지 제거 — 지우기 전에 급감 여부를 본다.
@@ -300,13 +307,13 @@ const ORG_PAGES = new Map(); // org명 → { instId, count }
   fs.rmSync(path.join(PUB, 'o'), { recursive: true, force: true });
 
   for (const o of byOrg.values()) {
-    const page = ORG_PAGES.get(o.org);
+    const page = ORG_PAGES.get(o.key);
     if (!page) continue;
     const list = o.courses.slice().sort((a, b) => (b.emplRate ?? -1) - (a.emplRate ?? -1));
-    const rates = M.orgRates.get(o.org);
-    const rateRows = rates ? [...rates.entries()].sort((a, b) => b[1] - a[1]).map(([catName, rate]) => {
+    const rates = M.orgRates.get(o.key);
+    const rateRows = rates ? [...rates.entries()].sort((a, b) => b[1].max - a[1].max).map(([catName, r]) => {
       const slug = CAT_SLUG_OF[catName];
-      const inner = `<span class="k">${esc(catName)}</span><span class="v">${rate}%${rate >= 95 ? '<sup>†</sup>' : ''}</span>`;
+      const inner = `<span class="k">${esc(catName)}</span><span class="v">${rateRange(r)}${r.max >= 95 ? '<sup>†</sup>' : ''}</span>`;
       return slug ? `<a class="orate" href="../c/${slug}">${inner}</a>` : `<div class="orate">${inner}</div>`;
     }).join('') : '';
 
@@ -315,7 +322,7 @@ const ORG_PAGES = new Map(); // org명 → { instId, count }
     const top = list[0];
     const topCat = top ? (CAT_OF[top.cat] || '') : '';
     const rp = top ? REGION_PAGES.get(`${top.sido}|${top.cat}`) : null; // sido는 모델이 이미 계산해 둠
-    const bestRate = rates && rates.size ? Math.max(...rates.values()) : null;
+    const bestRate = rates && rates.size ? Math.max(...[...rates.values()].map(r => r.max)) : null;
     // 지점이 여러 곳이면 주소별로 최대 3개. 주소 캐시가 아직 없으면 대표 과정으로 지도 검색 박스 1개.
     const locs = [...new Map(o.courses.filter(c => c.addr).map(c => [c.addr.addr, c])).values()];
     const locHtml = (locs.length ? locs.slice(0, 3) : o.courses.slice(0, 1)).map(c => locBox(c, o.org)).join('');
@@ -328,13 +335,15 @@ const ORG_PAGES = new Map(); // org명 → { instId, count }
 <div class="badges">${o.certGrade ? `<span class="bdg">${o.certGrade}</span>` : ''}<span class="bdg gray">국비지원 과정 ${page.count}개</span></div></div>
 ${locHtml}
 ${rateRows ? `<div class="ratebox">
-<h2 class="oh">직종별 학원 취업률</h2>
+<h2 class="oh">분야별 공시 취업률</h2>
 <div class="oratelist">${rateRows}</div>
-<div class="why"><p>고용노동부가 공시한 <b>${esc(o.org)}</b>의 직종별 취업률이에요. 과정 하나하나의 성적이 아니라, 이 학원이 2024년에 배출한 <b>직종별 수료생 전체(10명 이상)</b> 중 취업한 비율입니다. 같은 학원이라도 직종에 따라 취업률이 크게 갈리기 때문에, <b>내가 들을 과정이 속한 직종</b>의 수치를 보는 게 중요해요.${bestRate != null && bestRate >= 95 ? ' 95% 이상(†)은 수료 인원이 적은 직종에서 나왔을 수 있습니다.' : ''}</p></div></div>` : ''}
+<div class="why"><p>고용노동부가 고용24에 공시한 <b>${esc(o.org)}</b>의 취업률을 분야별로 모은 거예요. 고용24는 취업률을 과정별이 아니라 <b>학원×NCS 직종</b> 단위로 공시합니다(2024년에 종료한 과정의 실업자 수료생 10명 이상일 때). 여기의 <b>분야는 내배카랭킹이 과정명으로 나눈 자체 분류</b>라서, 한 분야 안에 직종이 여럿이면 공시값도 여럿입니다 — 그런 경우 가장 낮은 값과 높은 값을 «69~88.8%»처럼 함께 적었어요. <b>내가 들을 과정의 공시값</b>은 아래 과정 목록에서 확인하세요.${bestRate != null && bestRate >= 95 ? ' 95% 이상(†)은 수료 인원이 적은 직종에서 나왔을 수 있습니다.' : ''}</p></div></div>` : ''}
 <h2 class="oh">모집 중인 국비지원 과정 ${page.count}개</h2>
 ${list.map((c, i) => courseRow(c, i, 1, { showCat: true })).join('\n')}
 ${moreBtn(list.length - VISIBLE, '개 과정')}
 ${footNote()}
+${srcNote(1)}
+<p class="foot-note"><b>이 학원 관계자이신가요?</b> 표시된 내용이 고용24 공시와 다르거나 정정·삭제가 필요하면 <a href="mailto:hello@naebaeka.com?subject=${enc('[정정 요청] ' + o.org)}">hello@naebaeka.com</a>으로 알려 주세요. 고용24 공시와 대조해 바로잡고 결과를 회신드립니다(보통 영업일 3일 이내). <a href="../terms">→ 정정 요청 절차</a></p>
 ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학원 순위에서 비교하기</a>` : ''}
 <div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks(CORE_GUIDES, 1)}</div></div>`;
 
@@ -364,7 +373,7 @@ ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학�
   const idx = M.courses.filter(isMeaningful)
     .sort((a, b) => trustScore(b) - trustScore(a) || b.emplRate - a.emplRate || (a.costWon || 9e9) - (b.costWon || 9e9))
     .map(c => {
-      const op = ORG_PAGES.get(c.org);
+      const op = ORG_PAGES.get(orgKey(c));
       let an = -1;
       if (c.addr) {
         const a = c.addr.addr.replace(/\s*\([^)]*\)\s*/g, ' ').trim(); // 참고항목 「(인계동)」은 변환을 흐린다
@@ -416,18 +425,18 @@ for (const c of M.courses) {
   if (!isMeaningful(c)) continue;
   const catName = CAT_OF[c.cat] || '기타';
   const org = c.org || '훈련기관';
-  const others = M.orgRates.get(c.org);
+  const others = M.orgRates.get(orgKey(c));
   const otherList = others ? [...others.entries()].filter(([k]) => k !== catName) : [];
   const work24 = `https://www.work24.go.kr/hr/a/a/1100/trnnCrsInf.do`;
   const rp = REGION_PAGES.get(`${c.sido}|${c.cat}`);
-  const op = ORG_PAGES.get(c.org); // 이 학원의 집계 페이지(있는 경우)
+  const op = ORG_PAGES.get(orgKey(c)); // 이 학원의 집계 페이지(있는 경우)
   const rateBlock = c.emplRate != null ? `
 <div class="ratebox">
-<div class="rline"><span class="huge">${c.emplRate}%${c.emplRate >= 95 ? '<sup>†</sup>' : ''}</span><span class="rlb">학원 취업률<br><span style="font-weight:400;color:var(--mut);font-size:11.5px">${esc(org)} · ${catName} 직종</span></span></div>
+<div class="rline"><span class="huge">${c.emplRate}%${c.emplRate >= 95 ? '<sup>†</sup>' : ''}</span><span class="rlb">학원 취업률<br><span style="font-weight:400;color:var(--mut);font-size:11.5px">${esc(org)} · 고용24 공시</span></span></div>
 <div class="why"><h2>이 취업률, 무슨 뜻인가요?</h2>
 "이 과정을 들으면 ${c.emplRate}% 취업"이라는 뜻이 <b>아닙니다</b>. 고용노동부는 취업률을 과정별이 아니라 <b>학원×직종 단위</b>로 공시합니다. 이 숫자는 ${esc(org)}이(가) 2024년에 배출한 <b>이 과정과 같은 직종의 실업자 수료생(10명 이상)</b> 중 취업한 비율이에요.${c.emplRate >= 95 ? ' 100%에 가까운 수치는 수료 인원이 적은 소규모 기관에서 나오기 쉽습니다.' : ''}
  그래도 모든 학원이 같은 기준으로 공시되기 때문에, <b>"수료생이 실제로 취업까지 가는 학원"</b>을 고르는 신호로는 유용합니다.
-${otherList.length ? `<p class="orgrates">📊 이 학원의 다른 분야 취업률: ${otherList.map(([k, v]) => `<b>${k}</b> ${v}%`).join(' · ')}</p>` : ''}
+${otherList.length ? `<p class="orgrates">📊 이 학원의 다른 분야 취업률: ${otherList.map(([k, v]) => `<b>${k}</b> ${rateRange(v)}`).join(' · ')} <span style="color:var(--mut)">(분야는 자체 분류, 범위는 그 분야 과정들의 공시값)</span></p>` : ''}
 </div></div>` : `
 <div class="ratebox"><div class="rline"><span class="rlb">취업률 공시 없음</span></div>
 <div class="why">신규 개설 과정이거나 수료자가 10명 미만이어서 아직 취업률이 공시되지 않은 과정이에요. 나쁘다는 뜻이 아니라 <b>데이터가 없다</b>는 뜻입니다 — 학원 상담 시 이전 기수 취업 현황을 직접 물어보세요.</div></div>`;
@@ -446,8 +455,9 @@ ${rateBlock}
 </div>
 ${locBox(c, org)}
 <p class="foot-note">수강료는 정부지원 전 금액이에요. 내일배움카드를 쓰면 일반 과정은 보통 45~100%가 지원되지만, 과정 유형과 개인 조건에 따라 달라집니다(요양보호사 등 돌봄 특화과정은 90%를 먼저 부담한 뒤 취업 후 환급). 정확한 자부담금·수강신청은 고용24에서 확인하세요.</p>
+${srcNote(1)}
 <a class="cta" href="${work24}" target="_blank" rel="noopener">고용24에서 이 과정 검색하기</a>
-${op ? `<a class="cta sub" href="../o/${op.instId}">${esc(org)}의 다른 과정 ${op.count - 1}개 · 직종별 취업률 보기</a>` : ''}
+${op ? `<a class="cta sub" href="../o/${op.instId}">${esc(org)}의 다른 과정 ${op.count - 1}개 · 분야별 취업률 보기</a>` : ''}
 <a class="cta sub" href="../c/${c.cat}">${catName} 취업률 순위 전체 보기</a>
 ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학원 순위 (${rp.count}개) 보기</a>` : ''}
 <div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks(CORE_GUIDES, 1)}</div></div>`;
@@ -489,7 +499,7 @@ ${g.body}
 
 // ---------- 필수 3종: 소개 · 개인정보처리방침 ----------
 write('about.html', layout({
-  title: '내배카랭킹 소개 — 만든 사람과 데이터 원칙', desc: '내배카랭킹은 웹 개발자 Jason Jung이 혼자 만들고 운영하는 정보 서비스입니다. 고용노동부 공시 데이터를 가공 없이 재구성해 국비지원 훈련과정을 취업률로 비교합니다.',
+  title: '내배카랭킹 소개 — 만든 사람과 데이터 원칙', desc: '내배카랭킹은 웹 개발자 Jason Jung이 혼자 만들고 운영하는 정보 서비스입니다. 고용노동부 고용24 공시 취업률을 그대로 옮겨, 국비지원 훈련과정을 자체 기준으로 분류·정렬해 비교합니다.',
   canonical: '/about',
   jsonld: {
     '@context': 'https://schema.org', '@type': 'AboutPage', url: `${ORIGIN}/about`,
@@ -509,30 +519,70 @@ write('about.html', layout({
 <p>국비 과정을 검색하면 학원 홍보 글이 대부분이고, 정작 판단에 필요한 "이 학원 수료생이 실제로 취업하는가"는 찾기 어렵습니다. 그 데이터는 고용노동부가 이미 공시하고 있지만 흩어져 있어 비교가 어렵습니다. 내배카랭킹은 이 공시 데이터를 매일 수집해 분야별·지역별 순위로 재구성합니다.</p>
 <h2>데이터 원칙</h2>
 <ul>
-<li>모든 취업률은 고용노동부 고용24 공시 수치를 그대로 보여줍니다 (가공·추정하지 않음)</li>
+<li>취업률 숫자는 고용노동부 고용24 공시값을 그대로 옮깁니다 — 평균을 내거나 추정하지 않습니다</li>
+<li><b>분야 구분과 정렬 순서는 내배카랭킹의 자체 기준</b>입니다. 분야는 과정명으로 나눈 것이라 고용24의 NCS 직종과 다르고, 순서는 취업률에 기관 인증과 표본 신뢰도를 반영한 «신뢰도 순»입니다. 고용노동부가 매긴 순위가 아닙니다</li>
+<li>학원 단위 집계는 고용24의 훈련기관 ID 기준입니다(이름이 같아도 기관이 다르면 따로 집계)</li>
+<li>데이터는 하루 한 번 수집합니다. 모집 상태·일정·수강료는 수집 이후 바뀔 수 있어 고용24가 기준입니다</li>
 <li>취업률은 학원×직종 단위임을 모든 페이지에 명시합니다</li>
 <li>95% 이상 수치에는 소표본 가능성(†)을 표기합니다</li>
 <li>특정 학원과 제휴·광고 관계가 없습니다</li>
 </ul>
 <h2>고지</h2>
 <p>본 사이트는 고용노동부·고용24와 무관한 비공식 정보 서비스입니다. 수강 신청·자부담금 확인 등 공식 절차는 고용24(work24.go.kr)에서 진행하세요.</p>
+<h2>틀린 내용·정정 요청</h2>
+<p>표시된 내용이 고용24 공시와 다르면 <b>hello@naebaeka.com</b>으로 알려 주세요. 훈련기관 관계자의 정정·삭제 요청도 같은 주소로 받습니다. 절차는 <a href="terms">이용안내·정정 요청</a>에 있습니다.</p>
 <h2>문의</h2>
 <p>hello@naebaeka.com</p></article>`,
+}));
+write('terms.html', layout({
+  title: '이용안내·정정 요청 | 내배카랭킹', desc: '내배카랭킹의 정보 제공 범위, 데이터 기준, 틀린 내용의 정정·삭제 요청 절차 안내.',
+  canonical: '/terms',
+  content: `<article class="art"><h1>이용안내·정정 요청</h1>
+<h2>이 사이트가 하는 일</h2>
+<p>내배카랭킹은 고용노동부 고용24에 공시된 국비지원 훈련과정 정보를 모아 비교하기 쉽게 재구성한 <b>개인 운영 정보 서비스</b>입니다. 고용노동부·고용24·한국고용정보원과 무관하며, 수강 신청·상담·알선을 하지 않습니다. 특정 훈련기관에서 대가를 받고 순서를 바꾸는 일도 없습니다.</p>
+<h2>데이터 기준</h2>
+<ul>
+<li>취업률은 고용24 공시값을 그대로 옮깁니다. 분야 구분과 정렬 순서(신뢰도 순)는 내배카랭킹의 자체 기준입니다.</li>
+<li>수집은 하루 한 번입니다. 각 페이지의 «수집일» 이후에 고용24에서 바뀐 모집 상태·일정·수강료는 반영되지 않았을 수 있습니다.</li>
+<li>수강을 결정하기 전에 반드시 <a href="https://www.work24.go.kr" target="_blank" rel="noopener">고용24</a>와 훈련기관에서 최종 내용을 확인하세요.</li>
+</ul>
+<h2>틀린 내용의 정정·삭제 요청</h2>
+<p>수집·표시 과정에서 오류가 생길 수 있습니다. 틀린 내용을 발견하셨거나, 훈련기관 관계자로서 정정·삭제를 원하시면 아래처럼 알려 주세요.</p>
+<ol>
+<li><b>hello@naebaeka.com</b>으로 해당 페이지 주소와 틀린 부분(가능하면 고용24 화면)을 보내 주세요.</li>
+<li>접수하면 고용24 공시와 대조합니다. 사실 확인에 시간이 걸리는 경우 그동안 해당 표시를 내려 둡니다.</li>
+<li>확인되는 대로 바로잡고 결과를 회신드립니다(보통 영업일 3일 이내).</li>
+</ol>
+<h2>책임의 범위</h2>
+<p>운영자는 정보를 정확하게 유지하려고 노력하지만, 모든 내용이 항상 최신이고 오류가 없다고 보증하지는 못합니다. 이 사이트의 정보는 참고용이며, 수강 여부와 그에 따른 결과에 대한 판단은 이용자에게 있습니다. 운영자의 고의 또는 중대한 과실로 생긴 손해에 대한 책임까지 배제하는 것은 아닙니다.</p>
+<h2>출처와 저작권</h2>
+<p>훈련과정·취업률 정보의 출처는 고용노동부 고용24(work24.go.kr)입니다. 사이트의 글과 화면 구성은 운영자가 작성했습니다.</p>
+<p class="small">시행일: 2026-10-01 · 운영자 Jason Jung · hello@naebaeka.com</p></article>`,
 }));
 write('privacy.html', layout({
   title: '개인정보처리방침 | 내배카랭킹', desc: '내배카랭킹 개인정보처리방침 및 쿠키 사용 안내.',
   canonical: '/privacy',
   content: `<article class="art"><h1>개인정보처리방침</h1>
-<p>내배카랭킹(이하 "사이트")은 별도의 회원가입 없이 이용하는 정보 서비스로, 이용자의 개인정보를 직접 수집·저장하지 않습니다.</p>
+<p>내배카랭킹(이하 "사이트")은 회원가입 없이 이용하는 정보 서비스입니다. 사이트가 이용자에게서 직접 받는 개인정보는 <b>문의·정정 요청 메일</b>뿐이며, 그 밖에는 아래의 통계 도구가 방문 기록을 자동으로 수집합니다.</p>
+<h2>문의 메일</h2>
+<p>hello@naebaeka.com으로 메일을 보내시면 <b>이메일 주소와 메일 내용</b>을 받게 됩니다. 문의에 답하고 틀린 내용을 바로잡는 데에만 쓰고, 제3자에게 제공하지 않습니다. 처리가 끝난 뒤 1년간 보관하고(정정 이력 확인용) 삭제합니다. 그 전에 삭제를 원하시면 같은 주소로 요청해 주세요.</p>
 <h2>쿠키 및 광고</h2>
 <p>사이트는 Google 애드센스 광고를 게재할 수 있습니다. Google을 포함한 제3자 광고 사업자는 쿠키를 사용해 이용자의 이전 방문 기록을 바탕으로 광고를 게재할 수 있습니다. Google의 광고 쿠키 사용으로 이용자에게 맞춤형 광고가 제공될 수 있으며, 이용자는 <a href="https://adssettings.google.com" rel="noopener" target="_blank">Google 광고 설정</a>에서 맞춤 광고를 해제할 수 있습니다.</p>
 <h2>통계 도구</h2>
 <p>서비스 개선을 위해 <b>Google Analytics(GA4)</b>, Cloudflare Web Analytics, 검색엔진 웹마스터 도구(Google Search Console·네이버 서치어드바이저) 등의 방문 통계 도구를 사용합니다. 이 과정에서 쿠키가 사용될 수 있으며, 수집되는 정보는 개인을 식별하지 않는 통계 정보(방문 수·페이지·유입 경로 등)입니다. Google Analytics의 데이터 수집을 원치 않으시면 <a href="https://tools.google.com/dlpage/gaoptout" rel="noopener" target="_blank">Google 애널리틱스 차단 브라우저 부가기능</a>을 이용할 수 있습니다.</p>
 <h2>위치 정보</h2>
 <p>검색 페이지의 <b>「내 위치」</b> 기능을 누르면 브라우저가 위치 권한을 묻고, 허용한 경우에만 현재 위치를 사용합니다. 위치는 가까운 학원을 정렬하고 해당 시·군·구를 고르기 위해 이용자의 브라우저 안에서만 쓰이며, 사이트가 서버로 받거나 저장하지 않습니다. 이 과정에서 지도 표시와 행정구역 확인을 위해 좌표가 <b>카카오맵 API</b>로 전달됩니다.</p>
-<h2>문의</h2>
-<p>개인정보 관련 문의: hello@naebaeka.com</p>
-<p class="small">시행일: 2026-07-12</p></article>`,
+<h2>국외 이전·처리 위탁</h2>
+<p>위 통계·지도 도구와 사이트 호스팅 과정에서 접속 기록(IP 주소, 브라우저·기기 정보, 방문한 페이지, 쿠키 식별자)이 아래 사업자의 서버에서 처리될 수 있습니다.</p>
+<ul>
+<li><b>Google LLC</b>(미국) — Google Analytics 방문 통계, 광고 게재 시 Google 애드센스</li>
+<li><b>Cloudflare, Inc.</b>(미국) — 사이트 호스팅·전송, 방문 통계</li>
+<li><b>주식회사 카카오</b>(대한민국) — 지도 표시와 주소·좌표 변환(「내 위치」를 누른 경우 좌표 포함)</li>
+</ul>
+<p>쿠키 저장을 원치 않으면 브라우저 설정에서 쿠키를 차단할 수 있고, 그래도 사이트 이용에는 지장이 없습니다.</p>
+<h2>개인정보 보호책임자·문의</h2>
+<p>운영자 Jason Jung · hello@naebaeka.com</p>
+<p class="small">시행일: 2026-07-12 · 개정: 2026-10-01(문의 메일·국외 처리 항목 추가)</p></article>`,
 }));
 
 // ---------- 404 복구 맵 (gone/) ----------
@@ -571,7 +621,7 @@ let GONE_CATS = {};
   for (const c of M.courses) {
     if (LIVE_P.has(c.courseId)) continue;
     const reason = c.status !== '모집중' ? 1 : c.remote ? 2 : 3;
-    const op = ORG_PAGES.get(c.org);
+    const op = ORG_PAGES.get(orgKey(c));
     gone.set(c.courseId, ['c', c.title || '', c.org || '', LIVE_C.has(c.cat) ? c.cat : '', op ? op.instId : '', reason]);
   }
   for (const [org, o] of orgInfo) {
@@ -618,7 +668,7 @@ const gone404 = `<script>
     if(e[0]==='c'){
       var title=e[1], org=e[2], cat=e[3], inst=e[4], reason=e[5];
       h=card(title, org, {1:'모집이 마감돼 지금은 신청할 수 없는 과정이에요.',2:'원격(온라인) 과정이라 취업률 순위에서 빠져 있어요.',3:'수료자가 적어 아직 취업률이 공시되지 않은 과정이에요.'}[reason]||'');
-      if(inst) links+='<a class="cta" href="/o/'+inst+'">'+esc(org)+'의 다른 과정 · 직종별 취업률 보기</a>';
+      if(inst) links+='<a class="cta" href="/o/'+inst+'">'+esc(org)+'의 다른 과정 · 분야별 취업률 보기</a>';
       if(cat&&CATS[cat]) links+='<a class="cta'+(inst?' sub':'')+'" href="/c/'+cat+'">'+esc(CATS[cat])+' 취업률 순위 전체 보기</a>';
     } else {
       var org2=e[1], cat2=e[2], live=e[3];
@@ -654,7 +704,7 @@ for (const f of ['style.css', 'search.js', 'filters.js', 'map.js']) fs.copyFileS
 // gone/ 은 404 복구용 JSON 자산이라 크롤 대상이 아니다 — C의 병목이 크롤 예산이라 명시적으로 막는다.
 write('robots.txt', `User-agent: *\nAllow: /\nDisallow: /gone/\nDisallow: /s/\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 {
-  const urls = ['/', '/about', '/g/'];
+  const urls = ['/', '/about', '/terms', '/g/'];
   for (const g of pubGuides) urls.push(`/g/${g.slug}`);
   for (const c of M.cats) if (c.slug !== 'etc' && c.ranked.length >= 3) urls.push(`/c/${c.slug}`);
   for (const rc of M.regionCats) urls.push(`/r/${SIDO_SLUG[rc.sido] || rc.sido}-${rc.catSlug}`);

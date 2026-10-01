@@ -14,7 +14,7 @@ const { decode } = require('../lib/normalize');
 
 const MAX = Number(process.argv[2] || 40);
 const STALE_DAYS = Number(process.argv[3] || 90);
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (compatible; naebaeka-bot/1.0; +https://naebaeka.com/about; hello@naebaeka.com)'; // scripts/collect.js 와 같은 신원 표시
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'data', 'inst.json');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
