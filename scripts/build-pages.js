@@ -343,7 +343,7 @@ ${list.map((c, i) => courseRow(c, i, 1, { showCat: true })).join('\n')}
 ${moreBtn(list.length - VISIBLE, '개 과정')}
 ${footNote()}
 ${srcNote(1)}
-<p class="foot-note"><b>이 학원 관계자이신가요?</b> 표시된 내용이 고용24 공시와 다르거나 정정·삭제가 필요하면 <a href="mailto:hello@naebaeka.com?subject=${enc('[정정 요청] ' + o.org)}">hello@naebaeka.com</a>으로 알려 주세요. 고용24 공시와 대조해 바로잡고 결과를 회신드립니다(보통 영업일 3일 이내). <a href="../terms">→ 정정 요청 절차</a></p>
+<p class="foot-note"><b>이 학원 관계자이신가요?</b> 표시된 내용이 고용24 공시와 다르거나 정정·삭제가 필요하면 <a href="mailto:hello@naebaeka.com?subject=${enc('[정정 요청] ' + o.org)}">hello@naebaeka.com</a>으로 알려 주세요. 고용24 공시와 대조해 바로잡고 결과를 회신드립니다. <a href="../terms">→ 정정 요청 절차</a></p>
 ${rp ? `<a class="cta sub" href="../r/${rp.slug}">${rp.name} ${rp.catName} 학원 순위에서 비교하기</a>` : ''}
 <div class="seclinks"><h2>내일배움카드 발급·사용 가이드</h2><div class="glist">${guideLinks(CORE_GUIDES, 1)}</div></div>`;
 
@@ -551,7 +551,7 @@ write('terms.html', layout({
 <ol>
 <li><b>hello@naebaeka.com</b>으로 해당 페이지 주소와 틀린 부분(가능하면 고용24 화면)을 보내 주세요.</li>
 <li>접수하면 고용24 공시와 대조합니다. 사실 확인에 시간이 걸리는 경우 그동안 해당 표시를 내려 둡니다.</li>
-<li>확인되는 대로 바로잡고 결과를 회신드립니다(보통 영업일 3일 이내).</li>
+<li>확인되는 대로 바로잡고 결과를 회신드립니다.</li>
 </ol>
 <h2>책임의 범위</h2>
 <p>운영자는 정보를 정확하게 유지하려고 노력하지만, 모든 내용이 항상 최신이고 오류가 없다고 보증하지는 못합니다. 이 사이트의 정보는 참고용이며, 수강 여부와 그에 따른 결과에 대한 판단은 이용자에게 있습니다. 운영자의 고의 또는 중대한 과실로 생긴 손해에 대한 책임까지 배제하는 것은 아닙니다.</p>
