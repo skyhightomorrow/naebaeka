@@ -419,7 +419,18 @@ ${footNote(' 검색 결과도 기본은 신뢰도 순이고, 위에서 취업률
 // 제외된 과정의 잔존 페이지 제거(게이트 확정) — 지우기 전에 급감 여부를 본다.
 // ⚠️ C는 정상 삭제가 매일 발생한다(모집 마감분이 /p/에서 빠짐, 실측 하루 5~25건).
 //    그래서 D·F(허용 5)와 달리 넉넉히 잡아야 한다. 고용24 수집이 결손되면 수백~수천 건 단위로 빠진다.
-guardPages(path.join(PUB, 'p'), M.courses.filter(isMeaningful).map(c => c.courseId), { label: '과정 상세', max: 150 });
+// ⚠️ 2026-10-03: 10/1부터 load()가 개강일 지난 회차를 버리면서 하루 수백 건이 정상적으로 빠진다(10/2 하루 400건 안팎).
+//    이것까지 세면 매일 가드에 걸려 빌드가 멈춘다(10/2 두 회차 실패). 그래서 «raw에는 있는데 모든 회차가 개강일을 지난»
+//    과정은 사유가 확인된 정리로 보고 허용치 계산에서 뺀다. raw에서 아예 사라진 과정(=수집 결손)은 그대로 센다.
+const expiredIds = (() => {
+  const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const alive = new Set(M.courses.map(c => c.courseId));
+  const ids = new Set();
+  for (const r of JSON.parse(fs.readFileSync(path.join(ROOT, 'raw', 'courses-all.json'), 'utf8')))
+    if (r.startDate && r.startDate < todayKST && !alive.has(r.courseId)) ids.add(r.courseId);
+  return ids;
+})();
+guardPages(path.join(PUB, 'p'), M.courses.filter(isMeaningful).map(c => c.courseId), { label: '과정 상세', max: 150, expected: expiredIds });
 fs.rmSync(path.join(PUB, 'p'), { recursive: true, force: true });
 for (const c of M.courses) {
   if (!isMeaningful(c)) continue;

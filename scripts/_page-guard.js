@@ -20,10 +20,11 @@ const path = require("path");
 /**
  * @param {string} dir      대상 디렉토리(rmSync 직전에 호출할 것)
  * @param {Iterable<string>} nextSlugs  이번 빌드가 만들 파일명(확장자 제외, 디코드된 상태)
- * @param {{label: string, max: number}} opts
+ * @param {{label: string, max: number, expected?: Set<string>}} opts
  *   label 보고용 이름 · max 허용 삭제 수(정상 churn보다 넉넉히, 사고 규모보다는 작게)
+ *   expected 사라져도 되는 이유가 데이터로 확인된 slug(예: C의 개강일 지난 과정) — 허용치 계산에서 뺀다
  */
-function guardPages(dir, nextSlugs, { label, max }) {
+function guardPages(dir, nextSlugs, { label, max, expected = new Set() }) {
   const prev = new Set(
     (fs.existsSync(dir) ? fs.readdirSync(dir) : [])
       .filter((f) => f.endsWith(".html") && f !== "index.html")
@@ -31,7 +32,9 @@ function guardPages(dir, nextSlugs, { label, max }) {
   );
   if (!prev.size) return; // 첫 빌드
   const next = new Set([...nextSlugs]);
-  const vanished = [...prev].filter((s) => !next.has(s));
+  const gone = [...prev].filter((s) => !next.has(s));
+  const vanished = gone.filter((s) => !expected.has(s));
+  if (gone.length > vanished.length) console.warn(`ℹ️ ${label} 페이지 ${gone.length - vanished.length}개 정상 정리(사유 확인됨 — 허용치 계산 제외)`);
   if (vanished.length > max) {
     console.error(
       `\n🔴 빌드 중단 — ${label} 페이지 ${vanished.length}개가 사라집니다(허용 ${max}개).\n` +
