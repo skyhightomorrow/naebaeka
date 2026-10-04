@@ -303,7 +303,17 @@ const ORG_PAGES = new Map(); // 기관 ID(orgKey) → { instId, count }
 
   // 조건 미달로 빠진 학원의 잔존 페이지 제거 — 지우기 전에 급감 여부를 본다.
   // 정상 churn 실측 하루 최대 4건(학원이 유의미 과정 2개 미만으로 내려감) → 허용 40.
-  guardPages(path.join(PUB, 'o'), [...ORG_PAGES.values()].map(p => p.instId), { label: '학원', max: 40 });
+  // ⚠️ 2026-10-04: 개강일 지난 과정 제외(10/1~) 때문에 학원도 유의미 과정 2개 미만으로 떨어져 정상적으로 빠진다
+  //    (10/2~10/4 누적 52개 → 빌드 4회 연속 실패). 과정 가드와 같은 원칙으로, raw에 그대로 있고 개강일 지난 회차가
+  //    있는 학원은 사유가 확인된 정리로 보고 허용치 계산에서 뺀다. raw에서 아예 사라진 학원(=수집 결손)은 그대로 센다.
+  const expiredOrgIds = (() => {
+    const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const ids = new Set();
+    for (const r of JSON.parse(fs.readFileSync(path.join(ROOT, 'raw', 'courses-all.json'), 'utf8')))
+      if (r.instId && r.startDate && r.startDate < todayKST) ids.add(r.instId);
+    return ids;
+  })();
+  guardPages(path.join(PUB, 'o'), [...ORG_PAGES.values()].map(p => p.instId), { label: '학원', max: 40, expected: expiredOrgIds });
   fs.rmSync(path.join(PUB, 'o'), { recursive: true, force: true });
 
   for (const o of byOrg.values()) {
