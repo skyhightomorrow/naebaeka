@@ -438,6 +438,10 @@ const expiredIds = (() => {
   const ids = new Set();
   for (const r of JSON.parse(fs.readFileSync(path.join(ROOT, 'raw', 'courses-all.json'), 'utf8')))
     if (r.startDate && r.startDate < todayKST && !alive.has(r.courseId)) ids.add(r.courseId);
+  // 오늘 수집이 «사라진 과정 정리»로 raw에서 지운 과정(scripts/collect.js가 남기는 목록)도 사유 확인분이다.
+  // 수집이 끊기거나 실패율·커버리지 검사에 걸린 날은 이 목록이 비므로, 진짜 결손은 지금처럼 그대로 센다.
+  const prunedFile = path.join(ROOT, 'raw', 'pruned-ids.json');
+  if (fs.existsSync(prunedFile)) for (const id of JSON.parse(fs.readFileSync(prunedFile, 'utf8'))) if (!alive.has(id)) ids.add(id);
   return ids;
 })();
 guardPages(path.join(PUB, 'p'), M.courses.filter(isMeaningful).map(c => c.courseId), { label: '과정 상세', max: 150, expected: expiredIds });

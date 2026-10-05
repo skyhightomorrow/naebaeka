@@ -137,6 +137,7 @@ function parseCards(html) {
   // 전량 수집(START=1)이 정상 완주했을 때만 정리한다. 부분 수집이나 대량 실패 시에는 건드리지 않는다.
   // 안전 기준은 "기존 파일 대비 얼마나 줄었나"가 아니라 **사이트가 공시한 전체 건수를 다 봤나**로 잡는다.
   // (첫 정리에서는 누적 잔존분 때문에 정당하게 절반 가까이 줄어들 수 있어, 감소율 가드는 오히려 정리를 막는다.)
+  let prunedIds = [];
   const fullRun = START === 1;
   const failRate = okPages + failPages ? failPages / (okPages + failPages) : 1;
   const siteTotal = total ? Number(String(total).replace(/,/g, '')) : null;
@@ -149,10 +150,18 @@ function parseCards(html) {
     console.log(`\n⚠️ 공시 ${siteTotal ?? '?'}건 중 ${seenIds.size}건만 확인(커버리지 ${coverage == null ? '?' : (coverage * 100).toFixed(1) + '%'}) — 정리 건너뜀`);
   } else {
     let removed = 0;
-    for (const k of [...map.keys()]) if (!seen.has(k)) { map.delete(k); removed++; }
+    const removedIds = new Set();
+    for (const k of [...map.keys()]) if (!seen.has(k)) { removedIds.add(map.get(k).courseId); map.delete(k); removed++; }
     if (removed) save();
     console.log(`\n사라진 과정 정리: ${removed}건 삭제 (기존 ${before} → ${map.size})`);
+    // 이 정리로 raw에서 통째로 빠진 과정 ID를 빌드에 넘긴다. 빌드의 페이지 삭제 가드는 «raw에서 사라진 과정 = 수집 결손»으로
+    // 세는데, 여기서 지운 것은 실패율·커버리지 검사를 통과한 «출처가 내린 과정»이라 결손이 아니다.
+    // ⚠️ 2026-10-05: 이 구분이 없어 10/2~10/5 빌드가 연속으로 멈췄다(정리 1,559건 중 상세 페이지 262개가 «결손»으로 집계).
+    const kept = new Set([...map.values()].map(x => x.courseId));
+    prunedIds = [...removedIds].filter(id => !kept.has(id));
   }
+  // 정리를 안 한 날에도 매번 덮어쓴다(전날 목록이 남아 다른 날의 진짜 결손을 가리지 않도록). raw/* 라 커밋되지 않는다.
+  fs.writeFileSync(path.join(outDir, 'pruned-ids.json'), JSON.stringify(prunedIds), 'utf8');
 
   console.log(`완료: ${map.size}건 저장 → ${outFile} (사이트 전체 ${total}건, 페이지 성공 ${okPages}·실패 ${failPages})`);
 })();
